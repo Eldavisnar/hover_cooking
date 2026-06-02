@@ -83,8 +83,8 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
   var overlay=document.getElementById('overlay'), ox=overlay.getContext('2d');
   var chips=document.getElementById('chips'), startBtn=document.getElementById('startBtn'), hint=document.getElementById('hint'), fpsEl=document.getElementById('fps');
   var proc=document.createElement('canvas'), px=proc.getContext('2d',{willReadFrequently:true});
-  var PROC_W=480, PW=480, PH=360, grayBuf=null;
-  var PRESETS=[{n:'balanced',w:480,d:2.0},{n:'speed',w:384,d:3.0},{n:'range',w:640,d:1.5}], pIdx=0;
+  var PROC_W=384, PW=384, PH=288, grayBuf=null;
+  var PRESETS=[{n:'speed',w:384,d:3.0},{n:'turbo',w:320,d:4.0},{n:'balanced',w:480,d:2.0},{n:'range',w:640,d:1.5}], pIdx=0;
   var track={}, lastSeen={}, held={}, GRACE=260, DRAW_GRACE=240, MAX_EXTRAP=170, REINIT=350;
   var MINCUT=1.5, BETA=0.02, EASE=0.35;   // One-Euro params + render easing
   var stream=null, raf=0, ready=false, busy=false;
