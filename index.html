@@ -83,10 +83,14 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
   var overlay=document.getElementById('overlay'), ox=overlay.getContext('2d');
   var chips=document.getElementById('chips'), startBtn=document.getElementById('startBtn'), hint=document.getElementById('hint'), fpsEl=document.getElementById('fps');
   var proc=document.createElement('canvas'), px=proc.getContext('2d',{willReadFrequently:true});
-  var PROC_W=384, PW=384, PH=288, grayBuf=null;
-  var PRESETS=[{n:'speed',w:384,d:3.0},{n:'turbo',w:320,d:4.0},{n:'balanced',w:480,d:2.0},{n:'range',w:640,d:1.5}], pIdx=0;
-  var track={}, lastSeen={}, held={}, GRACE=260, DRAW_GRACE=240, MAX_EXTRAP=170, REINIT=350;
+  var PROC_W=320, PW=320, PH=240, grayBuf=null;
+  var PRESETS=[{n:'turbo',w:320,d:4.0},{n:'speed',w:384,d:3.0},{n:'balanced',w:480,d:2.0},{n:'range',w:640,d:1.5}], pIdx=0;
+  var track={}, lastSeen={}, held={}, BASE_GRACE=420, CENTER_BONUS=650, MAX_EXTRAP=190, REINIT=350;
   var MINCUT=1.5, BETA=0.02, EASE=0.35;   // One-Euro params + render easing
+  // longer wait before a tag is "gone", and even longer the closer it is to frame centre
+  function centerFactor(tr){ if(tr.fcx==null) return 0; var dx=tr.fcx-PW/2, dy=tr.fcy-PH/2;
+    var f=1-Math.sqrt(dx*dx+dy*dy)/(Math.sqrt(PW*PW+PH*PH)/2); return f<0?0:f; }
+  function graceFor(tr){ return BASE_GRACE + CENTER_BONUS*centerFactor(tr); }
   var stream=null, raf=0, ready=false, busy=false;
   var worker=null, useWorker=false, mTried=false, mReady=false, mM=null, mInit, mSo, mSb, mDt;
   var detT=0, dN=0, dLast=performance.now();
@@ -192,10 +196,10 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
     var vw=video.videoWidth, vh=video.videoHeight, m=coverMap(vw,vh);
     ox.lineWidth=3; ox.font='bold 18px ui-monospace,monospace'; ox.textAlign='center'; ox.textBaseline='middle';
     for(var id in track){
-      var tr=track[id], age=now-tr.t; if(age>DRAW_GRACE) continue;
+      var tr=track[id], age=now-tr.t, eg=graceFor(tr); if(age>eg) continue;
       var dd=ID_MAP[id], col=dd.hex, ex=Math.min(age,MAX_EXTRAP), dtv=tr.prev?(tr.t-tr.tPrev):0;
       var cs=tr.corners.map(function(c,ix){ if(tr.prev&&dtv>0){ var p=tr.prev[ix]; return mapPt(c.x+(c.x-p.x)/dtv*ex,c.y+(c.y-p.y)/dtv*ex,vw,vh,m);} return mapPt(c.x,c.y,vw,vh,m); });
-      var a=Math.max(0.4,1-age/DRAW_GRACE);
+      var a=Math.max(0.3,1-age/eg);
       ox.globalAlpha=a*0.45; ox.lineWidth=2;     // raw box, faint
       ox.strokeStyle=col; ox.beginPath(); ox.moveTo(cs[0].x,cs[0].y);
       for(var j=1;j<cs.length;j++) ox.lineTo(cs[j].x,cs[j].y);
@@ -212,7 +216,7 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
       }
       ox.globalAlpha=1;
     }
-    var any=[]; for(var id2=0;id2<16;id2++){ var p=(now-(lastSeen[id2]||-1e9))<=GRACE; held[id2]=p; if(p)any.push(id2); }
+    var any=[]; for(var id2=0;id2<16;id2++){ var trk=track[id2]; var p=trk?((now-(lastSeen[id2]||-1e9))<=graceFor(trk)):false; held[id2]=p; if(p)any.push(id2); }
     chips.innerHTML = any.length ? any.map(function(id){var dd=ID_MAP[id];return '<span class="chip" style="background:'+dd.hex+'">'+dd.color+' '+dd.letter+'</span>';}).join('') : '<span class="chip none">no tags detected</span>';
     if(changeCb){ try{ changeCb(any.map(function(id){return {id:id,color:ID_MAP[id].color,letter:ID_MAP[id].letter};})); }catch(e){} }
   }
