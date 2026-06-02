@@ -270,7 +270,7 @@
 </style>
 </head>
 <body>
-<video id="tagVideo" playsinline muted style="position:fixed;left:-20px;top:-20px;width:2px;height:2px;opacity:0;pointer-events:none;"></video>
+<video id="tagVideo" playsinline muted style="position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;opacity:0;z-index:-1;pointer-events:none;"></video>
 <canvas id="tagOverlay" style="position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:9990;"></canvas>
 <div id="wrap">
   <div id="redpad" class="pad">
@@ -1184,7 +1184,7 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
   // --- detection settings (turbo). Bump PROC_W / lower DEC if the small stick tags don't hold. ---
   var PROC_W=320, DEC=4.0, PW=320, PH=240, grayBuf=null;
   // persistence (dialed down from the tester): general wait + smaller centre bonus
-  var BASE_GRACE=180, CENTER_BONUS=250, MAX_EXTRAP=170, REINIT=350;
+  var BASE_GRACE=420, CENTER_BONUS=650, MAX_EXTRAP=190, REINIT=350;
   var MINCUT=1.5, BETA=0.02, EASE=0.35;
 
   var track={}, lastSeen={}, held={};
