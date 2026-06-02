@@ -56,11 +56,13 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
     setopt=M.cwrap('atagjs_set_detector_options','number',['number','number','number','number','number','number','number']);
     setbuf=M.cwrap('atagjs_set_img_buffer','number',['number','number','number']);
     det=M.cwrap('atagjs_detect','number',[]);
-    initd(); setopt(1.5,0.0,1,1,0,0,0);
+    initd(); setopt(2.0,0.0,1,1,0,0,0);
     postMessage({ready:true});
   });
   self.onmessage=function(e){
-    var d=e.data; if(!M||!d.buf){ return; }
+    var d=e.data;
+    if(d.setopt!==undefined){ if(M&&setopt) setopt(d.setopt,0.0,1,1,0,0,0); return; }
+    if(!M||!d.buf){ return; }
     var rgba=new Uint8Array(d.buf), n=d.w*d.h, gray=new Uint8Array(n);
     for(var i=0,j=0;j<n;i+=4,j++) gray[j]=(rgba[i]+rgba[i+1]+rgba[i+2])/3|0;
     var buf=setbuf(d.w,d.h,d.w); M.HEAPU8.set(gray,buf);
@@ -81,7 +83,8 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
   var overlay=document.getElementById('overlay'), ox=overlay.getContext('2d');
   var chips=document.getElementById('chips'), startBtn=document.getElementById('startBtn'), hint=document.getElementById('hint'), fpsEl=document.getElementById('fps');
   var proc=document.createElement('canvas'), px=proc.getContext('2d',{willReadFrequently:true});
-  var PROC_W=640, PW=640, PH=480, grayBuf=null;
+  var PROC_W=480, PW=480, PH=360, grayBuf=null;
+  var PRESETS=[{n:'balanced',w:480,d:2.0},{n:'speed',w:384,d:3.0},{n:'range',w:640,d:1.5}], pIdx=0;
   var track={}, lastSeen={}, held={}, GRACE=260, DRAW_GRACE=240, MAX_EXTRAP=170, REINIT=350;
   var stream=null, raf=0, ready=false, busy=false;
   var worker=null, useWorker=false, mTried=false, mReady=false, mM=null, mInit, mSo, mSb, mDt;
@@ -90,7 +93,11 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
   function resize(){ overlay.width=window.innerWidth; overlay.height=window.innerHeight; }
   window.addEventListener('resize',resize); resize();
   function b64(s){var b=atob(s),n=b.length,a=new Uint8Array(n);for(var i=0;i<n;i++)a[i]=b.charCodeAt(i);return a;}
-  function enableStart(){ if(startBtn){ startBtn.disabled=false; startBtn.textContent='Start camera'; } }
+  function enableStart(){ if(startBtn){ startBtn.disabled=false; startBtn.textContent='Start camera'; } applyPreset(); }
+  function applyPreset(){ var p=PRESETS[pIdx]; PROC_W=p.w;
+    if(useWorker&&worker){ worker.postMessage({setopt:p.d}); } else if(mReady&&mSo){ mSo(p.d,0.0,1,1,0,0,0); }
+    hint.textContent='quality: '+p.n+' \u00b7 tap screen to change'; }
+  window.addEventListener('click',function(){ if(!stream) return; pIdx=(pIdx+1)%PRESETS.length; applyPreset(); });
   function meter(now){ dN++; detT+=now-dLast; dLast=now; if(detT>500){ fpsEl.textContent=Math.round(1000/(detT/dN))+' det/s'+(useWorker?'':' (cpu)'); detT=0; dN=0; } }
 
   // ---- detector init: try Web Worker, fall back to main thread ----
