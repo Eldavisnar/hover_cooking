@@ -1,70 +1,29 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Hover Cooking — AprilTag input</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Hover Cooking — tag tester</title>
 <style>
-  *{box-sizing:border-box;}
-  body{margin:0;background:#0f0f12;color:#e7e7ea;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial;-webkit-text-size-adjust:100%;}
-  #app{max-width:560px;margin:0 auto;padding:14px;}
-  header h1{font-size:16px;margin:0 0 2px;letter-spacing:.5px;}
-  header p{margin:0 0 10px;font-size:12px;color:#9a9aa2;line-height:1.4;}
-  #stage{position:relative;background:#000;border:1px solid #26262b;border-radius:12px;overflow:hidden;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;}
-  #view{width:100%;height:100%;object-fit:cover;display:block;}
-  #hint{position:absolute;padding:0 18px;text-align:center;color:#9a9aa2;font-size:13px;line-height:1.5;}
-  #controls{display:flex;gap:8px;align-items:center;margin:10px 0;}
-  button{background:#1d4ed8;border:0;color:#fff;font:600 14px system-ui;padding:10px 16px;border-radius:10px;cursor:pointer;}
-  button#flipBtn{background:#26262b;}
-  #fps{margin-left:auto;font:600 12px ui-monospace,Menlo,Consolas,monospace;color:#71717a;}
-  #readout{font-size:14px;margin:6px 0 12px;min-height:20px;}
-  #readout b{font-family:ui-monospace,Menlo,Consolas,monospace;}
-  #count{color:#71717a;font-size:12px;margin-left:6px;}
-  #grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;}
-  .slot{position:relative;border:1.5px solid #26262b;border-radius:10px;padding:8px 6px;text-align:center;background:#161619;transition:background .1s,box-shadow .1s,border-color .1s;}
-  .slot .cl{display:block;font:700 9px ui-monospace,Menlo,Consolas,monospace;letter-spacing:1px;color:var(--hue);opacity:.85;}
-  .slot b{font-size:22px;line-height:1.15;}
-  .slot .st{display:block;font:600 10px ui-monospace,Menlo,Consolas,monospace;color:#a1a1aa;min-height:13px;}
-  .slot.held{background:var(--hue);border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.25),0 0 18px -2px var(--hue);}
-  .slot.held .cl,.slot.held .st{color:rgba(255,255,255,.92);opacity:1;}
-  .slot.held b{color:#fff;}
-  #log{font:500 12px ui-monospace,Menlo,Consolas,monospace;color:#9a9aa2;max-height:170px;overflow:auto;border-top:1px solid #26262b;padding-top:8px;}
-  #log div{padding:1px 0;}
-  #calib{background:#16233f;border:1px solid #2f6fe0;border-radius:10px;padding:10px 12px;margin:8px 0;font-size:13px;line-height:1.4;}
-  #calib b{color:#7ab0ff;}
-  #calib .cbtns{display:flex;gap:8px;margin-top:8px;}
-  #calib button{padding:8px 14px;border-radius:8px;border:0;font:600 13px system-ui;cursor:pointer;}
-  #calib .cap{background:#1d4ed8;color:#fff;} #calib .can{background:#26262b;color:#e7e7ea;}
-  #calibBtn.active{background:#1f9d4d;}
-  #mapWrap{margin:8px 0 12px;}
-  .maph{margin:0 0 6px;font:700 10px ui-monospace,Menlo,Consolas,monospace;letter-spacing:1.5px;color:#8a8a90;text-transform:uppercase;}
-  #screenmap{width:132px;aspect-ratio:.62;background:#0a0a0c;border:1.5px solid #2f6fe0;border-radius:8px;display:block;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:#000;overflow:hidden;
+    font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial;-webkit-text-size-adjust:100%;}
+  #view{position:fixed;inset:0;width:100%;height:100%;display:block;}
+  #chips{position:fixed;top:0;left:0;right:0;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;
+    padding:max(10px,env(safe-area-inset-top)) 10px 10px;z-index:5;pointer-events:none;}
+  .chip{font:700 14px ui-monospace,Menlo,Consolas,monospace;color:#fff;padding:7px 12px;border-radius:999px;
+    box-shadow:0 2px 10px rgba(0,0,0,.5);letter-spacing:.5px;}
+  .chip.none{background:rgba(255,255,255,.12);color:#cfcfd4;font-weight:600;}
+  #startBtn{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;
+    background:#1d4ed8;border:0;color:#fff;font:700 17px system-ui;padding:16px 28px;border-radius:14px;
+    box-shadow:0 6px 24px rgba(0,0,0,.5);cursor:pointer;}
+  #hint{position:fixed;left:0;right:0;bottom:max(14px,env(safe-area-inset-bottom));text-align:center;
+    color:#9a9aa2;font:600 12px ui-monospace,monospace;z-index:6;padding:0 16px;pointer-events:none;}
 </style></head>
 <body>
-<div id="app">
-  <header>
-    <h1>AprilTag input — live test</h1>
-    <p>Point the camera at the printed tags. Each tag maps to a colour + letter; a slot lights gold while its tag is in view (= held), and several can be held at once. Best with the rear camera and good light.</p>
-  </header>
-  <div id="stage">
-    <canvas id="view"></canvas>
-    <div id="hint">Tap “Start camera” and allow access.</div>
-  </div>
-  <div id="controls">
-    <button id="startBtn">Start camera</button>
-    <button id="flipBtn">Flip camera</button>
-    <button id="calibBtn">Crop to screen</button>
-    <span id="fps"></span>
-  </div>
-  <div id="calib" style="display:none"></div>
-  <div id="readout">Held: <b id="heldList">—</b><span id="count"></span></div>
-  <div id="mapWrap" style="display:none">
-    <h2 class="maph">Perceived position over screen</h2>
-    <canvas id="screenmap"></canvas>
-  </div>
-  <div id="grid"></div>
-  <div id="log"></div>
-</div>
+<canvas id="view"></canvas>
+<div id="chips"></div>
+<button id="startBtn">Start camera</button>
+<div id="hint">front-facing tag tester</div>
 <video id="video" playsinline muted style="display:none"></video>
-
 <script>/*
 Copyright (c) 2011 Juan Mellado
 
@@ -1310,213 +1269,94 @@ AR.DICTIONARIES['APRILTAG_36h11'] = {
 <script>
 (function(){
   var COLORS=[['RED','#e23b2e'],['BLUE','#2f6fe0'],['GREEN','#1f9d4d'],['YELLOW','#e0a81f']];
-  var LETTERS=['A','B','C','D'];
-  var ID_MAP={};
+  var LETTERS=['A','B','C','D'], ID_MAP={};
   for(var c=0;c<4;c++)for(var l=0;l<4;l++){var id=c*4+l;ID_MAP[id]={color:COLORS[c][0],hex:COLORS[c][1],letter:LETTERS[l]};}
 
   var video=document.getElementById('video');
-  var view=document.getElementById('view');
-  var vctx=view.getContext('2d');
-  var gridEl=document.getElementById('grid');
-  var logEl=document.getElementById('log');
-  var heldListEl=document.getElementById('heldList');
-  var countEl=document.getElementById('count');
-  var fpsEl=document.getElementById('fps');
+  var view=document.getElementById('view'), vx=view.getContext('2d');
+  var chips=document.getElementById('chips');
+  var startBtn=document.getElementById('startBtn');
   var hint=document.getElementById('hint');
 
-  var proc=document.createElement('canvas');
-  var pctx=proc.getContext('2d',{willReadFrequently:true});
+  var proc=document.createElement('canvas'), px=proc.getContext('2d',{willReadFrequently:true});
   var PROC_W=480;
+  var detector=null, stream=null, raf=0;
+  var lastSeen={}, held={}, GRACE=140;
 
-  var detector=null, stream=null, raf=0, facing='environment';
-  var lastSeen={}, held={}, downAt={};
-  var lastMarkers=[], posOf={};
+  function resize(){ view.width=window.innerWidth; view.height=window.innerHeight; }
+  window.addEventListener('resize',resize); resize();
 
-  // ---- screen-region crop computed from phone + camera SPECS (no manual calibration) ----
-  // The front camera looks straight up out of the glass. Given screen size, where the camera
-  // sits, its field of view and the expected play height, we project the four screen corners
-  // (lifted to that height) into the image -> that quad IS the screen region, turned into an
-  // image->screen homography. No corner-holding required.
-  var UNIT=[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}];
-  var calibPts=[], H=null, cropOn=false;
-  var SPEC={ W:7, H:15, camXp:50, camYp:3, hfov:65, vfov:50, hnom:12.5, rot:0, flip:false };
-  function solveLin(A,b){ var n=b.length,M=A.map(function(r,i){return r.concat([b[i]]);});
-    for(var c=0;c<n;c++){ var p=c; for(var r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[p][c]))p=r;
-      var t=M[c];M[c]=M[p];M[p]=t; var d=M[c][c]; if(Math.abs(d)<1e-12)return null;
-      for(var j=c;j<=n;j++)M[c][j]/=d;
-      for(var r2=0;r2<n;r2++){if(r2===c)continue;var f=M[r2][c];for(var k=c;k<=n;k++)M[r2][k]-=f*M[c][k];}}
-    return M.map(function(r){return r[n];}); }
-  function homography(src,dst){ var A=[],b=[];
-    for(var i=0;i<4;i++){var x=src[i].x,y=src[i].y,u=dst[i].x,v=dst[i].y;
-      A.push([x,y,1,0,0,0,-u*x,-u*y]);b.push(u);A.push([0,0,0,x,y,1,-v*x,-v*y]);b.push(v);}
-    var h=solveLin(A,b); return h?[h[0],h[1],h[2],h[3],h[4],h[5],h[6],h[7],1]:null; }
-  function applyH(M,p){var w=M[6]*p.x+M[7]*p.y+M[8];return {x:(M[0]*p.x+M[1]*p.y+M[2])/w,y:(M[3]*p.x+M[4]*p.y+M[5])/w};}
-  function centerOf(mk){var c=mk.corners;return {x:(c[0].x+c[2].x)/2,y:(c[0].y+c[2].y)/2};}
-  function screenPos(mk){ return H?applyH(H,centerOf(mk)):null; }
-  function inScreen(sp){ return !!sp && sp.x>=-0.06 && sp.x<=1.06 && sp.y>=-0.06 && sp.y<=1.06; }
-  function camPos(){ return {x:SPEC.W*SPEC.camXp/100, y:SPEC.H*SPEC.camYp/100}; }
-  function projUV(x,y,z){ var C=camPos(), R=Math.PI/180;
-    return { u:((x-C.x)/z)/Math.tan(SPEC.hfov/2*R), v:((y-C.y)/z)/Math.tan(SPEC.vfov/2*R) }; }
-  function uvToPx(u,v){ var nx=(u+1)/2, ny=(1-v)/2, t; if(SPEC.flip) nx=1-nx;
-    if(SPEC.rot===1){t=nx;nx=ny;ny=1-t;} else if(SPEC.rot===2){nx=1-nx;ny=1-ny;} else if(SPEC.rot===3){t=nx;nx=1-ny;ny=t;}
-    return { x:nx*proc.width, y:ny*proc.height }; }
-  function buildSpecQuad(){ if(!proc.width) return false;
-    var cs=[{x:0,y:0},{x:SPEC.W,y:0},{x:SPEC.W,y:SPEC.H},{x:0,y:SPEC.H}];
-    calibPts=cs.map(function(c){ var uv=projUV(c.x,c.y,SPEC.hnom); return uvToPx(uv.u,uv.v); });
-    H=homography(calibPts,UNIT); return !!H; }
-
-  var slotEls={};
-  for(var c2=0;c2<4;c2++){for(var l2=0;l2<4;l2++){
-    var id2=c2*4+l2, m=ID_MAP[id2];
-    var d=document.createElement('div');
-    d.className='slot'; d.style.setProperty('--hue',m.hex);
-    d.innerHTML='<span class="cl">'+m.color+'</span><b>'+m.letter+'</b><i class="st"></i>';
-    gridEl.appendChild(d); slotEls[id2]=d;
-  }}
-
-  function log(msg){
-    var t=new Date().toLocaleTimeString();
-    logEl.insertAdjacentHTML('afterbegin','<div>'+t+' &nbsp; '+msg+'</div>');
-    while(logEl.children.length>40) logEl.removeChild(logEl.lastChild);
-  }
-
-  async function startCamera(){
+  async function start(){
     try{
-      stopStream();
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1280},height:{ideal:720}},audio:false});
+      // FRONT camera only
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},audio:false});
       video.srcObject=stream; await video.play();
-      hint.style.display='none';
+      startBtn.style.display='none';
+      hint.textContent='front camera · mirrored · point at the tags';
       if(!detector) detector=new AR.Detector({dictionaryName:'APRILTAG_36h11'});
       cancelAnimationFrame(raf); raf=requestAnimationFrame(tick);
-    }catch(e){ hint.style.display='block'; hint.textContent='Camera error: '+e.message+'  — needs https or localhost, plus camera permission.'; }
+    }catch(e){ hint.textContent='Camera error: '+e.message+' (needs https + permission)'; }
   }
-  function stopStream(){ if(stream){ stream.getTracks().forEach(function(t){t.stop();}); stream=null; } }
 
-  var fAcc=0,fN=0,fLast=performance.now();
   function tick(){
     raf=requestAnimationFrame(tick);
     if(video.readyState<2||!video.videoWidth) return;
-    var ar=video.videoHeight/video.videoWidth;
-    proc.width=PROC_W; proc.height=Math.round(PROC_W*ar);
-    pctx.drawImage(video,0,0,proc.width,proc.height);
-    var img=pctx.getImageData(0,0,proc.width,proc.height);
-    var markers=[];
-    try{ markers=detector.detect(img)||[]; }catch(e){}
+    var vw=video.videoWidth, vh=video.videoHeight;
+    proc.width=PROC_W; proc.height=Math.round(PROC_W*vh/vw);
+    px.drawImage(video,0,0,proc.width,proc.height);            // raw (un-mirrored) for detection
+    var markers=[]; try{ markers=detector.detect(px.getImageData(0,0,proc.width,proc.height))||[]; }catch(e){}
     var now=performance.now();
-    if(cropOn) buildSpecQuad();
-    lastMarkers=markers; posOf={};
-    for(var i=0;i<markers.length;i++){ var mk=markers[i]; if(!(mk.id in ID_MAP)) continue;
-      if(H){ var sp=screenPos(mk); if(inScreen(sp)){ lastSeen[mk.id]=now; posOf[mk.id]=sp; } }
-      else { lastSeen[mk.id]=now; }
-    }
+    for(var i=0;i<markers.length;i++){ if(markers[i].id in ID_MAP) lastSeen[markers[i].id]=now; }
+    drawScene(vw,vh,markers);
     updateHeld(now);
-    draw(markers);
-    fN++; fAcc+=now-fLast; fLast=now;
-    if(fAcc>500){ fpsEl.textContent=Math.round(1000/(fAcc/fN))+' fps'; fAcc=0; fN=0; }
   }
 
-  var GRACE=140; // ms tolerance for dropped frames before we call a tag 'released'
-  function updateHeld(now){
-    var heldNow=[];
-    for(var id=0;id<16;id++){
-      var present=(now-(lastSeen[id]||-1e9))<=GRACE;
-      if(present&&!held[id]){ held[id]=true; downAt[id]=now; onEdge(id,true); }
-      else if(!present&&held[id]){ held[id]=false; onEdge(id,false); }
-      if(held[id]) heldNow.push(id);
-      var s=slotEls[id];
-      s.classList.toggle('held',!!held[id]);
-      s.querySelector('.st').textContent = held[id] ? ((now-downAt[id])/1000).toFixed(1)+'s' : '';
-    }
-    heldListEl.innerHTML = heldNow.length ? heldNow.map(function(id){return '<span style="color:'+ID_MAP[id].hex+'">'+ID_MAP[id].color+' '+ID_MAP[id].letter+'</span>';}).join(',  ') : '—';
-    countEl.textContent = heldNow.length ? '('+heldNow.length+' in view)' : '';
-    if(changeCb){ try{ changeCb(heldNow.map(function(id){return {id:id,color:ID_MAP[id].color,letter:ID_MAP[id].letter};})); }catch(e){} }
+  // map full-frame 'cover' fit, then mirror horizontally so motion matches the user
+  function coverMap(vw,vh){
+    var cw=window.innerWidth, ch=window.innerHeight, scale=Math.max(cw/vw,ch/vh);
+    return {scale:scale, dx:(cw-vw*scale)/2, dy:(ch-vh*scale)/2, cw:cw, ch:ch};
+  }
+  function mapPt(pX,pY,vw,vh,m){
+    var fx=pX*vw/proc.width, fy=pY*vh/proc.height;
+    return { x:m.cw-(m.dx+fx*m.scale), y:m.dy+fy*m.scale };   // mirror x
   }
 
-  function onEdge(id,down){
-    var m=ID_MAP[id];
-    log('<b style="color:'+m.hex+'">'+m.color+' '+m.letter+'</b> '+(down?'▼ held':'▲ released'));
-  }
-
-  function draw(markers){
-    view.width=proc.width; view.height=proc.height;
-    vctx.drawImage(proc,0,0);
-    if(H){ // dim outside the calibrated screen quad
-      vctx.save();
-      vctx.fillStyle='rgba(0,0,0,.55)'; vctx.fillRect(0,0,proc.width,proc.height);
-      vctx.globalCompositeOperation='destination-out';
-      vctx.beginPath(); vctx.moveTo(calibPts[0].x,calibPts[0].y);
-      for(var q=1;q<4;q++) vctx.lineTo(calibPts[q].x,calibPts[q].y);
-      vctx.closePath(); vctx.fill();
-      vctx.globalCompositeOperation='source-over';
-      vctx.strokeStyle='#2f6fe0'; vctx.lineWidth=2; vctx.stroke();
-      vctx.restore();
-    }
-    vctx.lineWidth=3; vctx.font='bold 16px ui-monospace,monospace'; vctx.textAlign='center'; vctx.textBaseline='middle';
+  function drawScene(vw,vh,markers){
+    var m=coverMap(vw,vh);
+    vx.clearRect(0,0,m.cw,m.ch);
+    vx.save(); vx.translate(m.cw,0); vx.scale(-1,1);            // mirrored video
+    vx.drawImage(video,m.dx,m.dy,vw*m.scale,vh*m.scale);
+    vx.restore();
+    vx.lineWidth=3; vx.font='bold 18px ui-monospace,monospace'; vx.textAlign='center'; vx.textBaseline='middle';
     for(var i=0;i<markers.length;i++){
-      var mk=markers[i], known=(mk.id in ID_MAP);
-      var sp=known?screenPos(mk):null, cropped=(!!H && known && !inScreen(sp));
-      var col = !known ? '#888' : (cropped ? '#555' : ID_MAP[mk.id].hex);
-      var cs=mk.corners;
-      vctx.strokeStyle=col; vctx.beginPath(); vctx.moveTo(cs[0].x,cs[0].y);
-      for(var j=1;j<cs.length;j++) vctx.lineTo(cs[j].x,cs[j].y);
-      vctx.closePath(); vctx.stroke();
-      var c2=centerOf(mk); vctx.fillStyle=col;
-      vctx.fillText(known?(cropped?'(out)':(ID_MAP[mk.id].color[0]+ID_MAP[mk.id].letter)):('?'+mk.id),c2.x,c2.y);
-    }
-    drawMap();
-  }
-  function drawMap(){
-    if(!H) return; var cv=document.getElementById('screenmap'); if(!cv) return;
-    var dpr=window.devicePixelRatio||1, r=cv.getBoundingClientRect();
-    cv.width=Math.round(r.width*dpr); cv.height=Math.round(r.height*dpr);
-    var g=cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0);
-    g.clearRect(0,0,r.width,r.height);
-    g.strokeStyle='#26262b'; g.lineWidth=1; g.strokeRect(2,2,r.width-4,r.height-4);
-    g.font='bold 9px ui-monospace,monospace'; g.textAlign='center'; g.textBaseline='middle';
-    for(var id in posOf){ if(!held[id]) continue; var p=posOf[id], m=ID_MAP[id];
-      var X=4+p.x*(r.width-8), Y=4+p.y*(r.height-8);
-      g.fillStyle=m.hex; g.beginPath(); g.arc(X,Y,7,0,7); g.fill();
-      g.fillStyle='#fff'; g.fillText(m.color[0]+m.letter,X,Y);
+      var mk=markers[i], known=(mk.id in ID_MAP), col=known?ID_MAP[mk.id].hex:'#999';
+      var cs=mk.corners.map(function(c){return mapPt(c.x,c.y,vw,vh,m);});
+      vx.strokeStyle=col; vx.beginPath(); vx.moveTo(cs[0].x,cs[0].y);
+      for(var j=1;j<cs.length;j++) vx.lineTo(cs[j].x,cs[j].y);
+      vx.closePath(); vx.stroke();
+      var cx=(cs[0].x+cs[2].x)/2, cy=(cs[0].y+cs[2].y)/2;
+      var lbl=known?(ID_MAP[mk.id].color+' '+ID_MAP[mk.id].letter):('id '+mk.id);
+      var w=vx.measureText(lbl).width+14;
+      vx.fillStyle='rgba(0,0,0,.6)'; vx.fillRect(cx-w/2,cy-14,w,28);
+      vx.fillStyle=known?col:'#ddd'; vx.fillText(lbl,cx,cy);     // upright, readable
     }
   }
 
-  // ---- swappable input contract (the game would consume this) ----
+  function updateHeld(now){
+    var any=[];
+    for(var id=0;id<16;id++){ var p=(now-(lastSeen[id]||-1e9))<=GRACE; held[id]=p; if(p)any.push(id); }
+    chips.innerHTML = any.length
+      ? any.map(function(id){var d=ID_MAP[id];return '<span class="chip" style="background:'+d.hex+'">'+d.color+' '+d.letter+'</span>';}).join('')
+      : '<span class="chip none">no tags detected</span>';
+    if(changeCb){ try{ changeCb(any.map(function(id){return {id:id,color:ID_MAP[id].color,letter:ID_MAP[id].letter};})); }catch(e){} }
+  }
+
+  // swappable input contract for the game
   var changeCb=null;
-  window.TagInput={
-    onChange:function(cb){changeCb=cb;},
-    getHeld:function(){var r=[];for(var id in held){if(held[id])r.push({id:+id,color:ID_MAP[id].color,letter:ID_MAP[id].letter});}return r;}
-  };
+  window.TagInput={ onChange:function(cb){changeCb=cb;},
+    getHeld:function(){var r=[];for(var id in held)if(held[id])r.push({id:+id,color:ID_MAP[id].color,letter:ID_MAP[id].letter});return r;} };
 
-  // ---- spec-based crop UI ----
-  var calibEl=document.getElementById('calib'), calibBtn=document.getElementById('calibBtn'), mapWrap=document.getElementById('mapWrap');
-  function specSlider(key,label,mn,mx,st,unit){ return '<div style="display:grid;grid-template-columns:84px 1fr 46px;align-items:center;gap:8px;margin:5px 0"><span style="font:600 11px ui-monospace,monospace;color:#c7c7cc">'+label+'</span><input type=range data-k="'+key+'" min='+mn+' max='+mx+' step='+st+' value='+SPEC[key]+'><output data-u="'+unit+'" style="font:700 11px ui-monospace,monospace;color:#7ab0ff;text-align:right">'+SPEC[key]+unit+'</output></div>'; }
-  function specBtnRow(label,html){ return '<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><span style="width:84px;font:600 11px ui-monospace,monospace;color:#c7c7cc">'+label+'</span><div style="display:flex;gap:6px;flex:1">'+html+'</div></div>'; }
-  function renderSpecPanel(){
-    if(!cropOn){ calibEl.style.display='none'; return; }
-    calibEl.style.display='block';
-    var bs='style="flex:1;background:#26262b;border:0;color:#e7e7ea;font:600 11px ui-monospace,monospace;padding:7px;border-radius:7px;cursor:pointer"';
-    calibEl.innerHTML =
-      '<div style="margin-bottom:6px">Crop from specs. If the blue box doesn\u2019t match where your tags actually sit, tap <b>Rotate</b>/<b>Mirror</b> or adjust below.</div>'+
-      specBtnRow('phone','<button '+bs+' data-p="phone">typical</button><button '+bs+' data-p="big">big</button><button '+bs+' data-p="tablet">tablet</button>')+
-      specSlider('hfov','H-FOV',40,110,1,'\u00b0')+
-      specSlider('vfov','V-FOV',30,95,1,'\u00b0')+
-      specSlider('hnom','play height',5,25,0.5,'cm')+
-      specSlider('camYp','camera edge',0,100,1,'%')+
-      specBtnRow('image','<button '+bs+' id="rotBtn">Rotate '+(SPEC.rot*90)+'\u00b0</button><button '+bs+' id="flipBtn2">Mirror: '+(SPEC.flip?'on':'off')+'</button>');
-    calibEl.querySelectorAll('input[type=range]').forEach(function(inp){ inp.oninput=function(){ SPEC[inp.dataset.k]=parseFloat(inp.value); var o=inp.parentNode.querySelector('output'); o.textContent=inp.value+o.dataset.u; }; });
-    calibEl.querySelectorAll('button[data-p]').forEach(function(b){ b.onclick=function(){ var P={phone:{W:7,H:15,hfov:65,vfov:50},big:{W:7.7,H:17,hfov:70,vfov:54},tablet:{W:13,H:18,hfov:60,vfov:46}}[b.dataset.p]; for(var k in P)SPEC[k]=P[k]; renderSpecPanel(); }; });
-    var rb=calibEl.querySelector('#rotBtn'); if(rb) rb.onclick=function(){ SPEC.rot=(SPEC.rot+1)%4; renderSpecPanel(); };
-    var fb=calibEl.querySelector('#flipBtn2'); if(fb) fb.onclick=function(){ SPEC.flip=!SPEC.flip; renderSpecPanel(); };
-  }
-  calibBtn.addEventListener('click',function(){
-    cropOn=!cropOn;
-    if(cropOn){ calibBtn.classList.add('active'); calibBtn.textContent='Crop: ON'; mapWrap.style.display='block'; }
-    else { H=null; calibPts=[]; calibBtn.classList.remove('active'); calibBtn.textContent='Crop to screen'; mapWrap.style.display='none'; }
-    renderSpecPanel();
-  });
-
-  document.getElementById('startBtn').addEventListener('click',startCamera);
-  document.getElementById('flipBtn').addEventListener('click',function(){ facing=(facing==='environment')?'user':'environment'; if(stream) startCamera(); });
+  startBtn.addEventListener('click',start);
 })();
 </script>
 </body></html>
