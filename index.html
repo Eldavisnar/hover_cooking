@@ -1279,9 +1279,9 @@ AR.DICTIONARIES['APRILTAG_36h11'] = {
   var hint=document.getElementById('hint');
 
   var proc=document.createElement('canvas'), px=proc.getContext('2d',{willReadFrequently:true});
-  var PROC_W=480;
+  var PROC_W=560;
   var detector=null, stream=null, raf=0;
-  var lastSeen={}, held={}, GRACE=140;
+  var lastSeen={}, held={}, track={}, GRACE=220, DRAW_GRACE=200, MAX_EXTRAP=110, REINIT=250;
 
   function resize(){ view.width=window.innerWidth; view.height=window.innerHeight; }
   window.addEventListener('resize',resize); resize();
@@ -1291,6 +1291,7 @@ AR.DICTIONARIES['APRILTAG_36h11'] = {
       // FRONT camera only
       stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},audio:false});
       video.srcObject=stream; await video.play();
+      try{ var tr=stream.getVideoTracks()[0]; if(tr&&tr.applyConstraints) tr.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(function(){}); }catch(e){}
       startBtn.style.display='none';
       hint.textContent='front camera · mirrored · point at the tags';
       if(!detector) detector=new AR.Detector({dictionaryName:'APRILTAG_36h11'});
@@ -1306,8 +1307,12 @@ AR.DICTIONARIES['APRILTAG_36h11'] = {
     px.drawImage(video,0,0,proc.width,proc.height);            // raw (un-mirrored) for detection
     var markers=[]; try{ markers=detector.detect(px.getImageData(0,0,proc.width,proc.height))||[]; }catch(e){}
     var now=performance.now();
-    for(var i=0;i<markers.length;i++){ if(markers[i].id in ID_MAP) lastSeen[markers[i].id]=now; }
-    drawScene(vw,vh,markers);
+    for(var i=0;i<markers.length;i++){ var mk=markers[i]; if(!(mk.id in ID_MAP)) continue;
+      lastSeen[mk.id]=now; var tr=track[mk.id];
+      if(tr && (now-tr.t)<=REINIT){ tr.prev=tr.corners; tr.tPrev=tr.t; tr.corners=mk.corners; tr.t=now; }
+      else { track[mk.id]={corners:mk.corners, prev:null, tPrev:0, t:now}; }   // fresh / reappeared: no stale velocity
+    }
+    drawScene(vw,vh,now);
     updateHeld(now);
   }
 
@@ -1321,24 +1326,30 @@ AR.DICTIONARIES['APRILTAG_36h11'] = {
     return { x:m.cw-(m.dx+fx*m.scale), y:m.dy+fy*m.scale };   // mirror x
   }
 
-  function drawScene(vw,vh,markers){
+  function drawScene(vw,vh,now){
     var m=coverMap(vw,vh);
     vx.clearRect(0,0,m.cw,m.ch);
     vx.save(); vx.translate(m.cw,0); vx.scale(-1,1);            // mirrored video
     vx.drawImage(video,m.dx,m.dy,vw*m.scale,vh*m.scale);
     vx.restore();
     vx.lineWidth=3; vx.font='bold 18px ui-monospace,monospace'; vx.textAlign='center'; vx.textBaseline='middle';
-    for(var i=0;i<markers.length;i++){
-      var mk=markers[i], known=(mk.id in ID_MAP), col=known?ID_MAP[mk.id].hex:'#999';
-      var cs=mk.corners.map(function(c){return mapPt(c.x,c.y,vw,vh,m);});
+    for(var id in track){
+      var tr=track[id], age=now-tr.t; if(age>DRAW_GRACE) continue;   // keep showing through brief dropouts
+      var d=ID_MAP[id], col=d.hex;
+      var ex=Math.min(age,MAX_EXTRAP), dtv=tr.prev?(tr.t-tr.tPrev):0;
+      var cs=tr.corners.map(function(c,k){
+        if(tr.prev && dtv>0){ var p=tr.prev[k]; return mapPt(c.x+(c.x-p.x)/dtv*ex, c.y+(c.y-p.y)/dtv*ex, vw,vh,m); }
+        return mapPt(c.x,c.y,vw,vh,m);
+      });
+      vx.globalAlpha=Math.max(0.4,1-age/DRAW_GRACE);
       vx.strokeStyle=col; vx.beginPath(); vx.moveTo(cs[0].x,cs[0].y);
       for(var j=1;j<cs.length;j++) vx.lineTo(cs[j].x,cs[j].y);
       vx.closePath(); vx.stroke();
       var cx=(cs[0].x+cs[2].x)/2, cy=(cs[0].y+cs[2].y)/2;
-      var lbl=known?(ID_MAP[mk.id].color+' '+ID_MAP[mk.id].letter):('id '+mk.id);
-      var w=vx.measureText(lbl).width+14;
+      var lbl=d.color+' '+d.letter, w=vx.measureText(lbl).width+14;
       vx.fillStyle='rgba(0,0,0,.6)'; vx.fillRect(cx-w/2,cy-14,w,28);
-      vx.fillStyle=known?col:'#ddd'; vx.fillText(lbl,cx,cy);     // upright, readable
+      vx.fillStyle=col; vx.fillText(lbl,cx,cy);                  // upright, readable
+      vx.globalAlpha=1;
     }
   }
 
