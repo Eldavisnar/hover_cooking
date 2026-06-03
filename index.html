@@ -1177,7 +1177,7 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
   var proc=document.createElement('canvas'), px=proc.getContext('2d',{willReadFrequently:true});
 
   // SCAN (acquisition) settings; ROI runs sharp. STRETCH expands the dot mapping to reach screen edges.
-  var SCAN_W=480, SCAN_DEC=2.0, ROI_MAX=520, ROI_DEC=1.0, SCAN_INTERVAL=160, STRETCH=1.25;
+  var SCAN_W=480, SCAN_DEC=2.0, ROI_MAX=520, ROI_DEC=1.0, SCAN_INTERVAL=160, STRETCH_X=1.25, STRETCH_Y=1.0;
   var BASE_GRACE=420, CENTER_BONUS=650, MAX_EXTRAP=190, REINIT=350;
   var MINCUT=1.5, BETA=0.02, EASE=0.35;
 
@@ -1249,8 +1249,10 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
     }
     if(!any) return null;
     minX=Math.max(0,minX); minY=Math.max(0,minY); maxX=Math.min(vw,maxX); maxY=Math.min(vh,maxY);
-    if(maxX-minX<40||maxY-minY<40) return null;
-    return {sx:minX,sy:minY,sw:maxX-minX,sh:maxY-minY};
+    var rw=maxX-minX, rh=maxY-minY;
+    if(rw<40||rh<40) return null;
+    if(rw>vw*0.6||rh>vh*0.6) return null;   // tags too far apart -> full scan handles it better
+    return {sx:minX,sy:minY,sw:rw,sh:rh};
   }
   function send(sx,sy,sw,sh,bufW,bufH,dec,mode,now){
     proc.width=bufW; proc.height=bufH; px.drawImage(video,sx,sy,sw,sh,0,0,bufW,bufH);
@@ -1284,7 +1286,7 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
   }
   function coverMap(){ var cw=window.innerWidth, ch=window.innerHeight, s=Math.max(cw/vw,ch/vh);
     return {scale:s,dx:(cw-vw*s)/2,dy:(ch-vh*s)/2,cw:cw,ch:ch}; }
-  function mapPt(vx2,vy2,m){ var nx=(vx2-vw/2)*STRETCH+vw/2, ny=(vy2-vh/2)*STRETCH+vh/2;
+  function mapPt(vx2,vy2,m){ var nx=(vx2-vw/2)*STRETCH_X+vw/2, ny=(vy2-vh/2)*STRETCH_Y+vh/2;
     return { x:m.cw-(m.dx+nx*m.scale), y:m.dy+ny*m.scale }; }
 
   function drawOverlay(now){
