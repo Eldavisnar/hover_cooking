@@ -1,1128 +1,27 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hover Cooking · co-op kitchen prototype</title>
-<!-- physics: dishes pile up under gravity, collide & rotate. (CDN — see note: file no longer fully offline) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Hover Cooking — tag tester (ROI)</title>
 <style>
-  /* self-contained: system font stacks, no network needed */
-
-  :root{
-    --bg:#13110e;
-    --panel:#1c1915;
-    --line:#2e2a23;
-    --cream:#f4ecd8;
-    --muted:#9b9281;
-    --red:#e8553b;
-    --red-dim:#5a2a22;
-    --blue:#3f8ad6;
-    --blue-dim:#1f3a52;
-    --gold:#e9b84a;
-    --green:#7cb342;
-  }
   *{box-sizing:border-box;margin:0;padding:0;}
-  html,body{height:100%;}
-  body{
-    background:var(--bg);
-    color:var(--cream);
-    font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-    overflow:hidden;
-    touch-action:none;
-    overscroll-behavior:none;
-    user-select:none;
-    -webkit-user-select:none;
-    -webkit-touch-callout:none;
-  }
-  #wrap{
-    height:100dvh;
-    max-height:100dvh;
-    display:grid;
-    grid-template-columns:1fr;
-    grid-template-rows:auto 36px 1fr auto;
-    grid-template-areas:
-      "redpad"
-      "hud"
-      "field"
-      "bluepad";
-  }
-  /* RED sits at the TOP edge — rotate 180° so letters face that player.
-     The whole pad reads RED and BLUE so no text is needed to explain sides. */
-  #redpad{grid-area:redpad;transform:rotate(180deg);border-bottom:2px solid var(--red);
-    background:linear-gradient(180deg, rgba(232,85,59,.20), rgba(232,85,59,.06));}
-  #bluepad{grid-area:bluepad;border-top:2px solid var(--blue);
-    background:linear-gradient(180deg, rgba(63,138,214,.06), rgba(63,138,214,.20));}
-
-  /* ---------- HUD ---------- */
-  #hud{
-    grid-area:hud;
-    display:flex;align-items:center;gap:22px;
-    padding:0 20px;
-    border-bottom:1px solid var(--line);
-    background:linear-gradient(180deg,#1c1915,#161310);
-  }
-  #hud .title{
-    font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;
-    font-weight:900;letter-spacing:-.5px;font-size:19px;
-  }
-  #hud .title span{color:var(--red);}
-  #hud .title em{color:var(--blue);font-style:normal;}
-  .stat{font-size:12px;color:var(--muted);}
-  .stat b{color:var(--cream);font-size:15px;}
-  #lives{letter-spacing:1px;font-size:14px;color:var(--red);}
-  #wave-tag{margin-left:auto;font-size:12px;color:var(--gold);}
-  #exitBtn{margin-left:14px;width:30px;height:30px;flex:0 0 auto;border-radius:8px;
-    border:1.5px solid var(--line);background:var(--panel);color:var(--muted);
-    font-size:15px;line-height:1;cursor:pointer;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-    display:flex;align-items:center;justify-content:center;transition:all .1s;}
-  #exitBtn:hover{color:var(--cream);border-color:var(--muted);}
-  #exitBtn:active{transform:scale(.92);}
-
-  /* quit confirmation */
-  #confirm{position:absolute;inset:0;z-index:60;background:rgba(8,7,5,.8);
-    display:flex;align-items:center;justify-content:center;padding:24px;
-    backdrop-filter:blur(3px);}
-  #confirm.confirmhide{display:none;}
-  .confirm-card{background:var(--panel);border:1.5px solid var(--line);border-radius:18px;
-    padding:24px 22px;max-width:320px;width:100%;text-align:center;
-    box-shadow:0 20px 50px rgba(0,0,0,.6);}
-  .confirm-title{font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:900;font-size:22px;color:var(--cream);}
-  .confirm-sub{font-size:12px;color:var(--muted);margin-top:6px;}
-  .confirm-row{display:flex;gap:10px;margin-top:20px;}
-  .confirm-row button{flex:1;padding:13px 8px;border-radius:11px;border:none;cursor:pointer;
-    font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:800;font-size:14px;}
-  .confirm-no{background:var(--gold);color:#1a1408;}
-  .confirm-yes{background:transparent;color:var(--muted);border:1.5px solid var(--line)!important;}
-  .confirm-yes:active,.confirm-no:active{transform:translateY(2px);}
-
-  /* ---------- bottom control pads ---------- */
-  .pad{
-    display:flex;flex-direction:column;gap:6px;
-    padding:8px 10px 10px;
-  }
-  .pad .who{
-    font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:800;
-    font-size:13px;letter-spacing:1px;text-align:center;
-  }
-  #redpad .who{color:var(--red);}
-  #bluepad .who{color:var(--blue);}
-  .pad .hint{display:none;}
-  /* four option keys in a single horizontal row, each tall and tappable */
-  .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
-  .key{
-    height:52px;border-radius:10px;border:1.5px solid var(--line);
-    background:var(--panel);
-    display:flex;align-items:center;justify-content:center;
-    font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:800;font-size:22px;
-    color:var(--muted);transition:transform .05s, background .08s, box-shadow .08s, color .08s;
-    position:relative;cursor:pointer;touch-action:none;
-  }
-  .key .cap{display:none;}
-  /* idle keys carry their pad's colour so the side reads instantly */
-  #redpad .key{background:rgba(232,85,59,.14);border-color:rgba(232,85,59,.45);color:#f4d9d2;}
-  #bluepad .key{background:rgba(63,138,214,.14);border-color:rgba(63,138,214,.45);color:#d2e4f4;}
-  /* ACTIVE = bright gold, clearly different from the resting tint */
-  .key.on{background:var(--gold)!important;color:#1a1408!important;border-color:var(--gold)!important;
-    box-shadow:0 0 22px rgba(233,184,74,.7);transform:scale(1.06);}
-  .tapbtn{
-    border-radius:9px;border:1.5px dashed var(--line);
-    background:transparent;color:var(--muted);font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:11px;
-    padding:8px 6px;letter-spacing:1px;text-align:center;cursor:pointer;touch-action:none;
-  }
-  .tapbtn:active{background:rgba(255,255,255,.06);}
-  #redpad .tapbtn b{color:var(--red);} #bluepad .tapbtn b{color:var(--blue);}
-
-  /* ---------- field ---------- */
-  #field{
-    grid-area:field;position:relative;overflow:hidden;
-    background:
-      radial-gradient(120% 80% at 50% -20%, #211d18 0%, transparent 60%),
-      repeating-linear-gradient(0deg,transparent 0 38px,rgba(255,255,255,.012) 38px 39px);
-  }
-  /* the two "burners" / active lanes glow */
-  #field::before,#field::after{
-    content:"";position:absolute;bottom:0;width:50%;height:100%;
-    pointer-events:none;opacity:0;transition:opacity .12s;
-  }
-  #field.red-live::before{opacity:1;left:0;
-    background:linear-gradient(0deg,rgba(232,85,59,.10),transparent 55%);}
-  #field.blue-live::after{opacity:1;right:0;
-    background:linear-gradient(0deg,rgba(63,138,214,.10),transparent 55%);}
-
-  /* ---------- pile overflow: the danger line near the top ---------- */
-  #dangerline{position:absolute;left:0;right:0;height:0;z-index:8;pointer-events:none;
-    border-top:2px dashed rgba(232,85,59,.45);opacity:.5;transition:opacity .2s;}
-  #dangerline::after{content:"STACK LINE";position:absolute;right:8px;top:3px;
-    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:8px;letter-spacing:2px;color:var(--red);opacity:.7;}
-  #field.danger #dangerline{opacity:1;animation:dangerblink .5s infinite alternate;}
-  @keyframes dangerblink{from{border-color:rgba(232,85,59,.4);}to{border-color:rgba(232,85,59,1);}}
-  #field.danger{box-shadow:inset 0 0 60px rgba(232,85,59,.18);}
-
-  .item{
-    position:absolute;
-    width:112px;
-    height:118px;            /* fixed: the physics body is a 112x118 box */
-    overflow:hidden;
-    border-radius:14px;
-    background:var(--panel);
-    border:1.5px solid var(--line);
-    padding:8px 7px 7px;
-    text-align:center;
-    box-shadow:0 8px 22px rgba(0,0,0,.45);
-    transform-origin:50% 50%;   /* rotate around the card's centre (= body centroid) */
-    will-change:transform,top,left;
-  }
-  .item .emoji{font-size:30px;line-height:1;filter:drop-shadow(0 3px 4px rgba(0,0,0,.4));}
-  .item .name{font-size:8px;color:var(--muted);letter-spacing:1px;margin-top:1px;text-transform:uppercase;}
-  .item .rule{
-    margin-top:5px;line-height:1.2;
-    border-top:1px solid var(--line);padding-top:5px;color:var(--cream);
-  }
-  .item .big{font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:900;font-size:20px;letter-spacing:0;}
-  .item .slot{font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:900;padding:0 1px;}
-  .item .r{color:var(--red);} .item .b{color:var(--blue);}
-  /* progress bar for timed / sequence steps */
-  .item .bar{height:5px;border-radius:3px;background:#000;margin-top:6px;overflow:hidden;}
-  .item .bar i{display:block;height:100%;width:0%;background:var(--gold);transition:width .08s linear;}
-  .item .step{font-size:8px;color:var(--gold);letter-spacing:.5px;margin-top:4px;min-height:10px;line-height:1.2;}
-  .item.satisfied{border-color:var(--green);box-shadow:0 0 26px rgba(124,179,66,.5);}
-  .item.satisfied .rule{color:var(--green);}
-  .item.tapme{animation:tappulse .5s infinite alternate;}
-  @keyframes tappulse{from{border-color:var(--green);}to{border-color:#bfe88a;box-shadow:0 0 34px rgba(124,179,66,.8);}}
-  .item.clear{animation:pop .28s ease forwards;}
-  @keyframes pop{to{transform:scale(1.35);opacity:0;}}
-  .item.miss{animation:die .35s ease forwards;}
-  @keyframes die{to{transform:translateY(40px) scale(.6);opacity:0;}}
-
-  .floataward{position:absolute;font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:900;
-    font-size:20px;color:var(--green);pointer-events:none;animation:rise .8s ease forwards;}
-  @keyframes rise{to{transform:translateY(-46px);opacity:0;}}
-
-  .btn{
-    font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:800;font-size:16px;letter-spacing:.5px;
-    padding:13px 30px;border-radius:12px;border:none;cursor:pointer;
-    background:var(--gold);color:#1a1408;transition:transform .06s;
-  }
-  .btn:active{transform:translateY(2px);}
-
-  /* ---------- TITLE SCREEN (poster) ---------- */
-  #over{position:absolute;inset:0;z-index:50;overflow:hidden;
-    background:
-      radial-gradient(130% 100% at 50% 6%, #2e2820 0%, #161310 52%, #0c0a07 100%);
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    text-align:center;padding:40px 24px;gap:0;}
-  #over.hide{display:none;}
-
-  .title-glow{position:absolute;top:-15%;left:50%;transform:translateX(-50%);
-    width:160%;height:65%;pointer-events:none;
-    background:radial-gradient(closest-side, rgba(233,184,74,.22), transparent 70%);}
-
-  .floaties{position:absolute;inset:0;pointer-events:none;overflow:hidden;}
-  .floaties span{position:absolute;opacity:.13;animation:drift linear infinite;}
-  @keyframes drift{
-    0%{transform:translateY(20px) rotate(0deg);}
-    50%{transform:translateY(-20px) rotate(8deg);}
-    100%{transform:translateY(20px) rotate(0deg);}}
-
-  .title-stack{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:18px;
-    margin-bottom:auto;margin-top:auto;}
-  #over h1{font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:900;line-height:.8;
-    letter-spacing:-2px;display:flex;flex-direction:column;
-    filter:drop-shadow(0 8px 0 rgba(0,0,0,.35));}
-  #over h1 span{color:var(--red);font-size:clamp(58px,19vw,108px);}
-  #over h1 em{font-style:normal;color:var(--blue);font-size:clamp(58px,19vw,108px);margin-top:-8px;}
-  .title-rule{width:64px;height:4px;border-radius:3px;background:var(--gold);}
-  #over .lead{color:var(--cream);font-size:18px;line-height:1.4;opacity:.85;
-    font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:700;letter-spacing:.3px;}
-
-  #over .btn{position:relative;z-index:2;font-size:20px;padding:16px 46px;margin-top:auto;
-    box-shadow:0 8px 0 #b8862b, 0 14px 24px rgba(0,0,0,.5);}
-
-  /* game-over reuses #over but keeps it simple */
-  #over.isover .floaties{display:none;}
-  #over .keyrow .r{color:var(--red);font-weight:bold;} #over .keyrow .b{color:var(--blue);font-weight:bold;}
-
-  /* ---------- Musketeers gate / teach overlay ---------- */
-  #gate{position:absolute;inset:0;background:rgba(8,7,5,.96);z-index:45;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:14px;text-align:center;padding:20px 22px;}
-  #gate.gatehide{display:none;}
-  .gate-kicker{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:11px;letter-spacing:3px;color:var(--green);}
-  #gate h2{font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:900;font-size:30px;letter-spacing:-.5px;color:var(--gold);}
-  .gate-body{color:var(--cream);font-size:13px;line-height:1.6;max-width:560px;}
-  .gate-body .r{color:var(--red);font-weight:bold;} .gate-body .b{color:var(--blue);font-weight:bold;}
-  .gate-big{font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:900;font-size:40px;letter-spacing:1px;margin-bottom:2px;}
-  .gate-big .r{color:var(--red);} .gate-big .b{color:var(--blue);}
-  .gate-sub{font-size:15px;color:var(--muted);} .gate-sub b{color:var(--cream);}
-  .gate-muskets{margin-top:10px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:18px;}
-  .gate-instruct{font-size:17px;color:var(--cream);text-align:left;line-height:1.3;font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:800;}
-  .gate-ring{position:relative;width:120px;height:120px;}
-  .gate-ring svg{width:120px;height:120px;transform:rotate(-90deg);}
-  .ring-bg{fill:none;stroke:var(--line);stroke-width:8;}
-  .ring-fg{fill:none;stroke:var(--gold);stroke-width:8;stroke-linecap:round;
-    stroke-dasharray:327;stroke-dashoffset:327;transition:stroke-dashoffset .08s linear;}
-  .gate-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:900;font-size:18px;color:var(--cream);}
-  .gate-status{font-size:15px;color:var(--cream);max-width:150px;text-align:left;line-height:1.35;
-    font-family:'Arial Black','Helvetica Neue',Impact,sans-serif;font-weight:700;}
-  .gate-status .r{color:var(--red);} .gate-status .b{color:var(--blue);}
-</style>
-</head>
+  html,body{height:100%;background:#000;overflow:hidden;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial;-webkit-text-size-adjust:100%;}
+  #video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);background:#000;}
+  #overlay{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;}
+  #chips{position:fixed;top:0;left:0;right:0;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:max(10px,env(safe-area-inset-top)) 10px 10px;z-index:5;pointer-events:none;}
+  .chip{font:700 14px ui-monospace,Menlo,Consolas,monospace;color:#fff;padding:7px 12px;border-radius:999px;box-shadow:0 2px 10px rgba(0,0,0,.5);letter-spacing:.5px;}
+  .chip.none{background:rgba(255,255,255,.12);color:#cfcfd4;font-weight:600;}
+  #startBtn{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;background:#1d4ed8;border:0;color:#fff;font:700 17px system-ui;padding:16px 28px;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.5);cursor:pointer;}
+  #startBtn:disabled{background:#3a3a42;}
+  #hint{position:fixed;left:0;right:0;bottom:max(14px,env(safe-area-inset-bottom));text-align:center;color:#9a9aa2;font:600 12px ui-monospace,monospace;z-index:6;padding:0 16px;pointer-events:none;}
+  #fps{position:fixed;top:max(8px,env(safe-area-inset-top));right:10px;z-index:6;font:700 11px ui-monospace,monospace;color:#71717a;}
+</style></head>
 <body>
-<video id="tagVideo" playsinline muted style="position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;opacity:0;z-index:-1;pointer-events:none;"></video>
-<canvas id="tagOverlay" style="position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:9990;"></canvas>
-<div id="wrap">
-  <div id="redpad" class="pad">
-    <div class="who">RED</div>
-    <div class="keys">
-      <div class="key" data-k="a">A</div>
-      <div class="key" data-k="b">B</div>
-      <div class="key" data-k="c">C</div>
-      <div class="key" data-k="d">D</div>
-    </div>
-  </div>
-
-  <div id="hud">
-    <div class="title"><span>HOVER</span> <em>COOKING</em></div>
-    <div class="stat">SCORE <b id="score">0</b></div>
-    <div class="stat">SERVED <b id="served">0</b></div>
-    <div id="wave-tag">WAVE 1</div>
-    <button id="exitBtn" title="Quit to menu" style="visibility:hidden">✕</button>
-  </div>
-
-  <div id="confirm" class="confirmhide">
-    <div class="confirm-card">
-      <div class="confirm-title">Quit to menu?</div>
-      <div class="confirm-sub">Your current run will end.</div>
-      <div class="confirm-row">
-        <button class="confirm-no" id="confirmNo">Keep cooking</button>
-        <button class="confirm-yes" id="confirmYes">Quit</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="field">
-    <div id="dangerline"></div>
-    <div id="over">
-      <div class="title-glow"></div>
-      <div class="floaties" id="floaties"></div>
-
-      <div class="title-stack">
-        <h1><span>HOVER</span><em>COOKING</em></h1>
-        <div class="title-rule"></div>
-        <div class="lead">A tiny kitchen.<br>A little chaos.</div>
-      </div>
-
-      <button class="btn" id="startBtn">LET'S COOK ▸</button>
-    </div>
-
-    <div id="gate" class="gatehide">
-      <div class="gate-kicker" id="gateKicker">ROUND CLEAR</div>
-      <h2 id="gateTitle">NEW MOVE</h2>
-      <div class="gate-body" id="gateBody"></div>
-      <div class="gate-muskets">
-        <div class="gate-ring"><svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="52"/><circle class="ring-fg" id="gateRing" cx="60" cy="60" r="52"/></svg><div class="gate-pct" id="gatePct"></div></div>
-        <div class="gate-status" id="gateStatus"></div>
-      </div>
-    </div>
-  </div>
-
-  <div id="bluepad" class="pad">
-    <div class="who">BLUE</div>
-    <div class="keys">
-      <div class="key" data-k="a">A</div>
-      <div class="key" data-k="b">B</div>
-      <div class="key" data-k="c">C</div>
-      <div class="key" data-k="d">D</div>
-    </div>
-  </div>
-</div>
-
-<script>
-(()=>{
-  // ---------- input mapping ----------
-  // RED uses A S D F  -> options A B C D
-  // BLUE uses J K L ;  -> options A B C D
-  const RED_KEYS  = {KeyA:0, KeyS:1, KeyD:2, KeyF:3};
-  const BLUE_KEYS = {KeyJ:0, KeyK:1, KeyL:2, Semicolon:3};
-  const OPT = ['A','B','C','D'];
-  const RED_TAP = 'Space';
-  const BLUE_TAP = 'Enter';
-
-  // active option per player (index 0..3 or null). Only ONE active at once.
-  const active = {red:null, blue:null};
-  // which physical keys are currently held, to resolve "one at a time"
-  const heldStack = {red:[], blue:[]};
-
-  const field = document.getElementById('field');
-  const scoreEl=document.getElementById('score');
-  const servedEl=document.getElementById('served');
-  const waveEl=document.getElementById('wave-tag');
-  const over=document.getElementById('over');
-  const msg=document.getElementById('msg');           // may be null (removed in portrait UI)
-  const restartBtn=document.getElementById('restartBtn'); // may be null
-
-  let state=null;
-
-  // ---------- PHYSICS (Matter.js) ----------
-  // Dishes are rigid boxes. They fall under gravity, collide, rotate, and STACK.
-  // No more "miss when it hits the bottom" — uncleared dishes pile up. The board
-  // floods Tetris-style: when the pile rests above the danger line, service is over.
-  const { Engine, Composite, Bodies, Body, Sleeping } = Matter;
-  const dangerEl = document.getElementById('dangerline');
-  const CARD_W = 112, CARD_H = 118;   // must match the .item box in CSS
-  let engine = null, bounds = [], DANGER_Y = 70;
-
-  function buildWorld(){
-    if(!engine){
-      engine = Engine.create();
-      engine.enableSleeping = true;     // resting piles go to sleep (cheap + lets us read "settled")
-      engine.gravity.y = 1.0;
-    } else {
-      Composite.clear(engine.world, false); // wipe all bodies (dishes + old bounds)
-    }
-    bounds = [];
-    rebuildBounds();
-  }
-  function rebuildBounds(){
-    for(const b of bounds) Composite.remove(engine.world, b);
-    const W = field.clientWidth, H = field.clientHeight, t = 240;
-    DANGER_Y = Math.max(58, H * 0.13);
-    dangerEl.style.top = DANGER_Y + 'px';
-    const opt = { isStatic:true, friction:0.9 };
-    const floor = Bodies.rectangle(W/2, H + t/2, W + t*2, t, opt);
-    const left  = Bodies.rectangle(-t/2, H/2, t, H*4, opt);
-    const right = Bodies.rectangle(W + t/2, H/2, t, H*4, opt);
-    bounds = [floor, left, right];
-    Composite.add(engine.world, bounds);
-  }
-  // wake the whole pile so it collapses into a freshly cleared gap
-  function wakePile(){
-    for(const o of state.items){ if(o.body && !o.done) Sleeping.set(o.body, false); }
-  }
-
-  // ---------- LEVEL PROGRESSION ----------
-  // Alternating teach / speed waves. A "teach" wave introduces ONE new mechanic
-  // (shown on a screen first); a "speed" wave just escalates pace with the modes
-  // unlocked so far. Between every level the Musketeers gate fires: both players
-  // hold the SAME letter for 2s to advance.
-  //   modes: plus (together) → tap (release) → order → fire → relay
-  const LEVELS = [
-    { kind:'teach', mode:'plus',  speedMul:1.00, title:'TOGETHER',
-      lines:['both hold','at once'],
-      types:['together'], tap:false },
-
-    { kind:'teach', mode:'tap',   speedMul:1.12, title:'RELEASE',
-      lines:['hold it right, then','let go together'],
-      types:['together'], tap:true },
-
-    { kind:'teach', mode:'order', speedMul:1.24, title:'IN ORDER',
-      lines:['hold in the','order shown'],
-      types:['together','order'], tap:true },
-
-    { kind:'teach', mode:'fire',  speedMul:1.36, title:'FIRE',
-      lines:['hold to','light the fire'],
-      types:['together','order','fire'], tap:true },
-
-    { kind:'teach', mode:'relay', speedMul:1.48, title:'RELAY',
-      lines:['first holds, both hold,','first releases'],
-      types:['together','order','fire','relay'], tap:true },
-  ];
-  function levelConfig(idx){
-    if(idx < LEVELS.length) return LEVELS[idx];
-    // past the taught moves: keep all modes, just get faster each round
-    const over = idx - LEVELS.length + 1;
-    return { kind:'speed', mode:'relay', speedMul:1.48 + over*0.12,
-             types:['together','order','fire','relay'], tap:true };
-  }
-
-  function freshState(){
-    return {
-      running:false, phase:'play', score:0, served:0, lives:5,
-      levelIdx:0, cfg:LEVELS[0],
-      items:[], spawnTimer:1.0, sinceWave:0, lastT:0,
-      gateHold:0
-    };
-  }
-
-  // ---------- option highlight on pads ----------
-  function paintPads(){
-    document.querySelectorAll('#redpad .key').forEach((el,i)=>{
-      el.classList.toggle('on', active.red===i);
-    });
-    document.querySelectorAll('#bluepad .key').forEach((el,i)=>{
-      el.classList.toggle('on', active.blue===i);
-    });
-  }
-
-  function setActiveFromStack(side){
-    const st=heldStack[side];
-    active[side] = st.length? st[st.length-1] : null;
-    paintPads();
-  }
-
-  // ---------- item / dish definitions ----------
-  const FOODS=[
-    ['🍅','tomato'],['🥩','steak'],['🍳','fried egg'],['🥔','potato'],
-    ['🧅','onion'],['🥕','carrot'],['🍞','bread'],['🧀','cheese'],
-    ['🍄','mushroom'],['🌶️','pepper'],['🐟','fish'],['🥦','broccoli'],
-    ['🍗','chicken'],['🫑','capsicum'],['🥓','bacon']
-  ];
-
-  let idc=0;
-  function rnd(n){return Math.floor(Math.random()*n);}
-  function pick(a){return a[rnd(a.length)];}
-  function twoDistinct(n){let a=rnd(n),b=rnd(n);while(b===a)b=rnd(n);return[a,b];}
-
-  // choose a constraint type allowed at the current wave
-  // ---------- SPAWN PACING — STAIR-STEPPED ESCALATION ----------
-  // Difficulty escalates continuously, but in STEPS: the spawn interval is constant
-  // within a wave (a plateau), then drops a notch at each wave boundary (announced
-  // by the "WAVE N" beat). It keeps stepping down past the comfortable zone so the
-  // game genuinely keeps getting harder — eventually demanding near-perfect serial
-  // clearing, at which point lives run out. Each wave is a flat plateau; the jump
-  // between waves is the escalation.
-  const AVG_CLEAR = 1.3;
-  function targetInterval(){
-    // faster levels (higher speedMul) spawn more often; clamp so it never drops
-    // below near-perfection. Base comfortable interval / speedMul.
-    const base = 3.1;
-    return Math.max(1.2, base / state.cfg.speedMul);
-  }
-  // cap only dishes still in the AIR, so we never spawn on top of a falling cluster.
-  // the resting pile is uncapped on purpose — that's what eventually floods the board.
-  const MAX_AIRBORNE = 5;
-  function airborneCount(){
-    return state.items.filter(x=>!x.done && !x.dying && x.body && !x.body.isSleeping && x.body.speed>=0.35).length;
-  }
-
-  function chooseType(){
-    const live=state.items.filter(x=>!x.done&&!x.dying);
-    const haveRelay = live.some(x=>x.type==='relay');
-    const haveFire  = live.some(x=>x.type==='fire');
-    const haveOrder = live.some(x=>x.type==='order');
-    const allowed = state.cfg.types;
-
-    // 'together' is the staple (weighted). sequenced types one-at-a-time each.
-    const pool=[];
-    if(allowed.includes('together')) pool.push('together','together');
-    if(allowed.includes('order') && !haveOrder) pool.push('order');
-    if(allowed.includes('fire')  && !haveFire)  pool.push('fire');
-    if(allowed.includes('relay') && !haveRelay) pool.push('relay');
-    if(!pool.length) pool.push('together');
-    return pick(pool);
-  }
-
-  function makeItem(){
-    const type=chooseType();
-    const [food,fname]=pick(FOODS);
-    const ro=rnd(4), bo=rnd(4);
-    const wantTap = state.cfg.tap && type==='together' && (Math.random()<0.55);
-    // who acts first / who lights the fire — randomized so it isn't always Red
-    const firstSide = Math.random()<0.5?'red':'blue';   // order & relay: who's first
-    const fireSide  = Math.random()<0.5?'red':'blue';   // fire: who lights it
-
-    const it={
-      id:++idc, type, food, fname,
-      ro, bo, firstSide, fireSide,
-      el:null, barEl:null, stepEl:null, body:null,
-      done:false, dying:false,
-      wantTap,
-      primed:false, relRedT:null, relBlueT:null,
-      phase:0, heldTime:0,
-      fireNeed: 0.9,          // fixed: dishes no longer race a fall deadline
-      satisfied:false, satisfiedHold:0,
-      overTime:0,             // time spent resting above the danger line
-      x:0, y:-CARD_H
-    };
-    buildEl(it);
-
-    // drop in from just above the field at a random x, with a tiny spin so the pile
-    // builds unevenly instead of in a perfect column.
-    const W=field.clientWidth;
-    const x = CARD_W/2 + 6 + Math.random()*Math.max(1, W - CARD_W - 12);
-    const body = Bodies.rectangle(x, -CARD_H, CARD_W, CARD_H, {
-      restitution:0.04, friction:0.6, frictionStatic:0.9, chamfer:{radius:9}
-    });
-    Body.setAngularVelocity(body, (Math.random()-0.5)*0.06);
-    it.body = body;
-    Composite.add(engine.world, body);
-    syncItem(it);
-
-    state.items.push(it);
-  }
-
-  function ruleHTML(it){
-    const R=`<span class="slot r">${OPT[it.ro]}</span>`;
-    const B=`<span class="slot b">${OPT[it.bo]}</span>`;
-    const first = it.firstSide==='red'?R:B;
-    const second= it.firstSide==='red'?B:R;
-    if(it.type==='together')
-      // order doesn't matter, but shuffle which side shows first so it's not always Red
-      return `<span class="big">${first} + ${second}</span>`;
-    if(it.type==='order')   // first → second, both end held (order matters)
-      return `<span class="big">${first} ▸ ${second}</span>`;
-    if(it.type==='relay')   // in, in, then the first one bails
-      return `<span class="big">${first} → ${second}</span>`;
-    if(it.type==='fire'){   // doubled letter = the fire (whoever lights it)
-      const fire = it.fireSide==='red'?`${R}${R}`:`${B}${B}`;
-      const join = it.fireSide==='red'?B:R;
-      return `<span class="big">${fire} + ${join}</span>`;
-    }
-    return '';
-  }
-
-  function buildEl(it){
-    const el=document.createElement('div');
-    el.className='item';
-    el.innerHTML=`
-      <div class="emoji">${it.food}</div>
-      <div class="name">${it.fname}</div>
-      <div class="rule">${ruleHTML(it)}</div>
-      <div class="bar"><i></i></div>
-      <div class="step"></div>`;
-    field.appendChild(el);
-    it.el=el;
-    it.barEl=el.querySelector('.bar i');
-    it.stepEl=el.querySelector('.step');
-  }
-
-  // position + rotate the DOM card from its physics body (body.position is the centroid)
-  function syncItem(it){
-    const p=it.body.position;
-    it.x = p.x - CARD_W/2;
-    it.y = p.y - CARD_H/2;
-    it.el.style.left = it.x + 'px';
-    it.el.style.top  = it.y + 'px';
-    it.el.style.transform = 'rotate(' + it.body.angle + 'rad)';
-  }
-
-  // ---------- constraint evaluation, per frame ----------
-  function redOK(it){return active.red===it.ro;}
-  function blueOK(it){return active.blue===it.bo;}
-
-  function evalItem(it,dt){
-    if(it.done||it.dying) return;
-    let sat=false, step='';
-
-    if(it.type==='together'){
-      sat = redOK(it)&&blueOK(it);
-      step = sat? 'both on' : (redOK(it)?'need other':blueOK(it)?'need other':'');
-      it.barEl.style.width = sat? '100%':'0%';
-    }
-
-    else if(it.type==='order'){
-      // first side holds, THEN second joins; both end held. Wrong order = wait.
-      const firstOK  = it.firstSide==='red'?redOK(it):blueOK(it);
-      const secondOK = it.firstSide==='red'?blueOK(it):redOK(it);
-      if(it.phase===0){
-        step='①';
-        // advance only when the FIRST is on and the SECOND has not jumped early
-        if(firstOK && !secondOK) it.phase=1;
-        // if second jumps the gun before first, hold at phase 0 (no progress)
-      } else {
-        step='②';
-        if(firstOK && secondOK){ sat=true; }
-        else if(!firstOK){ it.phase=0; } // first let go too early, restart
-      }
-      it.barEl.style.width = sat?'100%':(it.phase>=1?'55%':'0%');
-    }
-
-    else if(it.type==='relay'){
-      // first side alone -> both -> first LEAVES while second stays. side-aware.
-      const firstOK  = it.firstSide==='red'?redOK(it):blueOK(it);
-      const secondOK = it.firstSide==='red'?blueOK(it):redOK(it);
-      const firstL = it.firstSide==='red'?'RED':'BLUE';
-      if(it.phase===0){
-        step='① '+firstL+' in';
-        if(firstOK&&!secondOK) it.phase=1;
-      } else if(it.phase===1){
-        step='② both in';
-        if(firstOK&&secondOK){ if(it._both===undefined)it._both=0; it._both+=dt; if(it._both>0.35)it.phase=2;}
-        else if(!firstOK){ it.phase=0; it._both=undefined; }
-      } else if(it.phase===2){
-        step='③ '+firstL+' leave';
-        if(secondOK&&!firstOK){ sat=true; }
-        else if(firstOK&&secondOK){ step='③ '+firstL+' LEAVE!'; }
-        else if(!secondOK){ it.phase=1; it._both=undefined; }
-      }
-      it.barEl.style.width = (it.phase/3*100)+'%';
-      if(sat) it.barEl.style.width='100%';
-    }
-
-    else if(it.type==='fire'){
-      // fireSide lights the fire (hold until lit, stays lit); other side joins.
-      const fireOK = it.fireSide==='red'?redOK(it):blueOK(it);
-      const joinOK = it.fireSide==='red'?blueOK(it):redOK(it);
-      if(fireOK) it.heldTime=Math.min(it.fireNeed, it.heldTime+dt);
-      else if(!it._lit) it.heldTime=Math.max(0, it.heldTime-dt*0.35);
-      if(it.heldTime>=it.fireNeed) it._lit=true;
-      const lit = it._lit;
-      it.barEl.style.width=(Math.min(it.heldTime,it.fireNeed)/it.fireNeed*100)+'%';
-      if(!lit){
-        step = fireOK? 'firing up…' : 'light the fire';
-      } else {
-        step = joinOK? 'cooking!' : 'fire lit · join';
-        sat = joinOK;
-      }
-    }
-
-    // ---- satisfied / plating handling ----
-    if(it.wantTap){
-      // RELEASE-TOGETHER mode.
-      // Step 1: rule met while both hold -> becomes "primed".
-      // Step 2: once primed, BOTH must let go within a short window of each other.
-      const r=redOK(it), b=blueOK(it);
-      if(sat){
-        it.primed=true;
-        if(!it.satisfied){ it.satisfied=true; it.el.classList.add('satisfied'); }
-        it.el.classList.add('tapme');
-        it.stepEl.textContent='✔ NOW RELEASE TOGETHER!';
-        it.relRedT=null; it.relBlueT=null; // reset release stamps while still held
-      } else if(it.primed){
-        // we were primed; track each player's release moment
-        if(it.relRedT==null && !r) it.relRedT=performance.now();
-        if(it.relBlueT==null && !b) it.relBlueT=performance.now();
-        if(it.relRedT!=null && it.relBlueT!=null){
-          const gap=Math.abs(it.relRedT-it.relBlueT)/1000;
-          if(gap<=0.35){ clearItem(it,true); }      // simultaneous -> plated!
-          else {
-            // not simultaneous: missed the sync. Disarm; they must re-satisfy.
-            it.primed=false; it.satisfied=false;
-            it.el.classList.remove('satisfied','tapme');
-            it.relRedT=it.relBlueT=null;
-            it.stepEl.textContent='out of sync — re-do it';
-          }
-        } else {
-          // one released, waiting for the other (within window)
-          it.stepEl.textContent='✔ RELEASE TOGETHER!';
-        }
-      } else {
-        it.stepEl.textContent=step;
-      }
-    }
-    else {
-      // non-tap dishes auto-resolve after a brief confirm hold
-      if(sat){
-        if(!it.satisfied){ it.satisfied=true; it.el.classList.add('satisfied'); }
-        it.satisfiedHold+=dt;
-        it.stepEl.textContent='✔ '+step;
-        if(it.satisfiedHold>0.45) clearItem(it,true);
-      } else {
-        if(it.satisfied){ it.satisfied=false; it.el.classList.remove('satisfied'); it.satisfiedHold=0; }
-        it.stepEl.textContent=step;
-      }
-    }
-  }
-
-  function tryTap(side){ /* tap-to-plate removed; release-together replaces it */ }
-
-  function clearItem(it,success){
-    if(it.done||it.dying) return;
-    it.done=true;
-    if(it.body){ Composite.remove(engine.world, it.body); it.body=null; }
-    wakePile();   // dishes resting above the gap fall in to fill it
-    it.el.classList.remove('tapme','satisfied');
-    it.el.classList.add('clear');
-    const pts = it.type==='together'?10 : it.type==='order'?14 : it.type==='fire'?15 : 20;
-    const bonus = it.wantTap?5:0;
-    state.score+=pts+bonus;
-    state.served++;
-    floatAward(it, '+'+(pts+bonus));
-    scoreEl.textContent=state.score;
-    servedEl.textContent=state.served;
-    setTimeout(()=>it.el.remove(),300);
-    setTimeout(()=>{ state.items=state.items.filter(x=>x!==it); },320);
-  }
-
-  function floatAward(it,txt){
-    const f=document.createElement('div');
-    f.className='floataward';f.textContent=txt;
-    f.style.left=it.x+'px';f.style.top=it.y+'px';
-    field.appendChild(f);
-    setTimeout(()=>f.remove(),800);
-  }
-
-  // (miss/hearts removed — uncleared dishes pile up; the loss is pile overflow,
-  //  handled in the main loop via the danger line.)
-
-  // ---------- main loop (phase machine: 'play' | 'gate') ----------
-  const LEVEL_SECONDS = 20;   // how long each play level lasts before the gate
-  function loop(t){
-    if(!state.running){ return; }
-    const dt=Math.min(.05,(t-state.lastT)/1000)||0;
-    state.lastT=t;
-    const H=field.clientHeight;
-
-    if(state.phase==='play'){
-      const timeUp = state.sinceWave>LEVEL_SECONDS;
-      // spawn (stop spawning once the level's time is up, so the air clears for the gate)
-      state.spawnTimer-=dt;
-      state.sinceWave+=dt;
-      if(!timeUp && state.spawnTimer<=0){
-        if(airborneCount()<MAX_AIRBORNE) makeItem();
-        state.spawnTimer=targetInterval();
-      }
-
-      // step the physics world (clamp delta so one slow frame can't tunnel the pile)
-      Engine.update(engine, Math.min(dt, 1/30)*1000);
-
-      let airborne=0, nearTop=false, overflow=false;
-      for(const it of state.items){
-        if(it.done||it.dying) continue;
-        syncItem(it);
-        evalItem(it,dt);
-        if(it.done || !it.body) continue;   // dish was cleared during eval — body is gone
-
-        const settled = it.body.isSleeping || it.body.speed < 0.35;
-        const top = it.body.position.y - CARD_H/2;
-        if(!settled) airborne++;
-        if(top < DANGER_Y + 44) nearTop = true;
-        // a dish that has come to rest with its top above the line = the stack overflowed
-        if(settled && top < DANGER_Y){ it.overTime += dt; if(it.overTime>0.5) overflow=true; }
-        else it.overTime = 0;
-      }
-
-      field.classList.toggle('danger', nearTop);
-      if(overflow){ gameOver(); return; }
-
-      // level complete: time's up AND nothing is still falling. The pile may remain and
-      // carries over into the next level as standing pressure.
-      if(timeUp && airborne===0){ enterGate(); }
-    }
-    else if(state.phase==='gate'){
-      let prog;
-      if(state.gateMode==='any'){
-        // speed round: both just hold anything for 1s
-        const both=(active.red!==null && active.blue!==null);
-        if(both) state.gateHold+=dt; else state.gateHold=Math.max(0,state.gateHold-dt*1.5);
-        prog=state.gateHold/1.0;
-        setGatePrompt(both?'':'hold anything to start');
-      } else {
-        // teach round: perform the move you just learned
-        prog=gateRepStep(dt);
-      }
-      updateGateRing(prog);
-      if(prog>=1){ advanceLevel(); }
-    }
-    requestAnimationFrame(loop);
-  }
-
-  // ---------- gate (Musketeers) + level transitions ----------
-  const gateEl=document.getElementById('gate');
-  const gateRing=document.getElementById('gateRing');
-  const gatePct=document.getElementById('gatePct');
-  const gateStatus=document.getElementById('gateStatus');
-  const gateTitle=document.getElementById('gateTitle');
-  const gateBody=document.getElementById('gateBody');
-  const gateKicker=document.getElementById('gateKicker');
-  const RING_LEN=327;
-
-  function enterGate(){
-    state.phase='gate';
-    state.gateHold=0;
-    const nextIdx=state.levelIdx+1;
-    const next=levelConfig(nextIdx);
-    state.gateNext=next;
-    if(next.kind==='teach'){
-      gateKicker.textContent = state.levelIdx<0 ? 'HOW TO COOK' : 'NEW MOVE!';
-      gateTitle.textContent=next.title;
-      state.gateMode=next.mode;          // plus | tap | order | fire | relay
-      const [r,b]=twoDistinct(4);
-      state.gateRo=r; state.gateBo=b;
-      state.gateFirst = Math.random()<0.5?'red':'blue';
-      state.gateFire  = Math.random()<0.5?'red':'blue';
-      state.repPhase=0; state.repHeld=0; state.repRedT=null; state.repBlueT=null; state.repLit=false; state.repBoth=0;
-      const R=`<span class="r">${OPT[r]}</span>`, B=`<span class="b">${OPT[b]}</span>`;
-      const first = state.gateFirst==='red'?R:B, second = state.gateFirst==='red'?B:R;
-      let big='';
-      if(next.mode==='plus' || next.mode==='tap') big=`${first} + ${second}`;
-      else if(next.mode==='order') big=`${first} ▸ ${second}`;
-      else if(next.mode==='relay') big=`${first} → ${second}`;
-      else if(next.mode==='fire'){
-        const fire = state.gateFire==='red'?`${R}${R}`:`${B}${B}`;
-        const join = state.gateFire==='red'?B:R;
-        big=`${fire} + ${join}`;
-      }
-      const sub=next.lines[1]||'';
-      gateBody.innerHTML=`<div class="gate-big">${big}</div><div class="gate-sub">${sub}</div>`;
-    } else {
-      gateKicker.textContent='NICE!';
-      gateTitle.textContent='FASTER!';
-      gateBody.innerHTML='<div class="gate-sub">Same moves. Quicker dishes.</div>';
-      state.gateMode='any';              // speed rounds: just hold anything
-    }
-    gateEl.classList.remove('gatehide');
-    setGatePrompt('');
-    updateGateRing(0);
-  }
-
-  // run the practice rep for a teach gate; returns progress 0..1 and completes at 1.
-  function gateRepStep(dt){
-    const ro=state.gateRo, bo=state.gateBo;
-    const r=(active.red===ro), b=(active.blue===bo);
-    const firstOK  = state.gateFirst==='red'?r:b;
-    const secondOK = state.gateFirst==='red'?b:r;
-    const fireOK   = state.gateFire==='red'?r:b;
-    const joinOK   = state.gateFire==='red'?b:r;
-    let prog=0, prompt='';
-
-    if(state.gateMode==='plus'){
-      if(r&&b){ state.repHeld+=dt; } else { state.repHeld=Math.max(0,state.repHeld-dt*2); }
-      prog=Math.min(1,state.repHeld/0.6);
-      prompt = (r&&b)?'hold it!':'try it!';
-    }
-    else if(state.gateMode==='tap'){ // release-together
-      if(state.repPhase===0){
-        if(r&&b){ state.repHeld+=dt; if(state.repHeld>0.4) state.repPhase=1; }
-        else state.repHeld=Math.max(0,state.repHeld-dt*2);
-        prog=Math.min(0.5,state.repHeld/0.4*0.5);
-        prompt = (r&&b)?'now let go together!':'try it!';
-      } else {
-        if(state.repRedT==null && !r) state.repRedT=performance.now();
-        if(state.repBlueT==null && !b) state.repBlueT=performance.now();
-        if(state.repRedT!=null && state.repBlueT!=null){
-          const gap=Math.abs(state.repRedT-state.repBlueT)/1000;
-          if(gap<=0.35){ prog=1; } else { state.repPhase=0; state.repHeld=0; state.repRedT=state.repBlueT=null; prompt='out of sync — again!'; }
-        } else { prog=0.5; prompt='let go together!'; }
-      }
-    }
-    else if(state.gateMode==='order'){ // first holds, then second joins
-      if(state.repPhase===0){
-        prompt='first one…';
-        if(firstOK && !secondOK) state.repPhase=1;
-        prog=firstOK?0.4:0;
-      } else {
-        prompt='now the other!';
-        if(firstOK && secondOK){ prog=1; }
-        else if(!firstOK){ state.repPhase=0; prog=0; }
-        else prog=0.55;
-      }
-    }
-    else if(state.gateMode==='fire'){
-      if(fireOK) state.repHeld=Math.min(1.0,state.repHeld+dt); else if(!state.repLit) state.repHeld=Math.max(0,state.repHeld-dt*0.5);
-      if(state.repHeld>=1.0) state.repLit=true;
-      if(!state.repLit){ prog=state.repHeld*0.6; prompt = fireOK?'firing up…':'light the fire'; }
-      else { prog = joinOK?1:0.6; prompt = joinOK?'cooking!':'now join!'; }
-    }
-    else if(state.gateMode==='relay'){
-      if(state.repPhase===0){ prompt='first in…'; if(firstOK&&!secondOK) state.repPhase=1; prog=0.2; }
-      else if(state.repPhase===1){ prompt='now both!'; if(firstOK&&secondOK){ state.repBoth+=dt; if(state.repBoth>0.3) state.repPhase=2; } else if(!firstOK){ state.repPhase=0; state.repBoth=0; } prog=0.5; }
-      else { prompt='first one, let go!'; if(secondOK&&!firstOK){ prog=1; } else if(firstOK&&secondOK){ prog=0.75; } else if(!secondOK){ state.repPhase=1; state.repBoth=0; } }
-    }
-    setGatePrompt(prompt);
-    return prog;
-  }
-
-  function setGatePrompt(html){
-    if(gateStatus){ gateStatus.style.display=html?'block':'none'; gateStatus.innerHTML=html; }
-  }
-  function updateGateRing(p){
-    gateRing.style.strokeDashoffset = RING_LEN*(1-Math.min(1,p));
-    gatePct.textContent = p>=1 ? 'GO!' : '';
-  }
-
-  function advanceLevel(){
-    state.levelIdx++;
-    state.cfg=levelConfig(state.levelIdx);
-    state.phase='play';
-    state.sinceWave=0;
-    state.spawnTimer=0.6;
-    state.gateHold=0;
-    gateEl.classList.add('gatehide');
-    gateStatus.classList.remove('ok');
-    waveEl.textContent='LV '+(state.levelIdx+1);
-    flashMsg(state.cfg.kind==='teach'? state.cfg.title : 'FASTER!');
-  }
-
-
-  let msgTimer=null;
-  function flashMsg(s){
-    let t=document.getElementById('toast');
-    if(!t){
-      t=document.createElement('div'); t.id='toast';
-      t.style.cssText='position:absolute;top:10px;left:50%;transform:translateX(-50%);'+
-        'background:rgba(20,17,13,.92);border:1px solid var(--line);color:var(--gold);'+
-        'font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;letter-spacing:1px;padding:7px 14px;'+
-        'border-radius:20px;z-index:30;pointer-events:none;white-space:nowrap;';
-      field.appendChild(t);
-    }
-    t.textContent=s; t.style.opacity='1';
-    clearTimeout(msgTimer);
-    msgTimer=setTimeout(()=>{ t.style.transition='opacity .4s'; t.style.opacity='0'; },1800);
-  }
-
-  // ---------- keyboard ----------
-  function down(e){
-    if(e.repeat) return;
-    if(!state||!state.running){
-      return;
-    }
-    if(e.code===RED_TAP){ e.preventDefault(); tryTap('red'); flashKey('red','tap'); return;}
-    if(e.code===BLUE_TAP){ e.preventDefault(); tryTap('blue'); flashKey('blue','tap'); return;}
-    if(e.code in RED_KEYS){
-      const i=RED_KEYS[e.code];
-      const st=heldStack.red; if(!st.includes(i)) st.push(i);
-      setActiveFromStack('red');
-    } else if(e.code in BLUE_KEYS){
-      const i=BLUE_KEYS[e.code];
-      const st=heldStack.blue; if(!st.includes(i)) st.push(i);
-      setActiveFromStack('blue');
-    }
-  }
-  function up(e){
-    if(e.code in RED_KEYS){
-      const i=RED_KEYS[e.code];
-      heldStack.red=heldStack.red.filter(x=>x!==i);
-      setActiveFromStack('red');
-    } else if(e.code in BLUE_KEYS){
-      const i=BLUE_KEYS[e.code];
-      heldStack.blue=heldStack.blue.filter(x=>x!==i);
-      setActiveFromStack('blue');
-    }
-  }
-  function flashKey(side,kind){
-    // brief visual for tap
-    const pad = side==='red'?document.getElementById('redpad'):document.getElementById('bluepad');
-    pad.style.transition='none';pad.style.background='rgba(255,255,255,.04)';
-    setTimeout(()=>{pad.style.background='';},90);
-  }
-  window.addEventListener('keydown',down,true);
-  window.addEventListener('keyup',up,true);
-  document.addEventListener('keydown',down,true);
-  document.addEventListener('keyup',up,true);
-
-  // ---- press-and-hold: an option is active ONLY while the box is held down ----
-  // pointerdown = activate that option; pointerup / leave / cancel = release it.
-  // Uses Pointer Events so one touch per finger works (multitouch on phone).
-  function bindPad(side){
-    const padId = side==='red'?'redpad':'bluepad';
-    document.querySelectorAll('#'+padId+' .key').forEach((el,i)=>{
-      const press=(ev)=>{
-        ev.preventDefault();
-        const st=heldStack[side];
-        if(!st.includes(i)) st.push(i);
-        setActiveFromStack(side);
-        try{ el.setPointerCapture(ev.pointerId); }catch(e){}
-      };
-      const release=(ev)=>{
-        ev.preventDefault();
-        heldStack[side]=heldStack[side].filter(x=>x!==i);
-        setActiveFromStack(side);
-      };
-      el.addEventListener('pointerdown',press);
-      el.addEventListener('pointerup',release);
-      el.addEventListener('pointercancel',release);
-      el.addEventListener('pointerleave',release);
-    });
-  }
-  bindPad('red'); bindPad('blue');
-  // bridge for the hover-tag input layer: toggles the SAME held state as touch/keys
-  window.__tagBridge={
-    hold:function(side,idx){ var st=heldStack[side]; if(!st.includes(idx)){ st.push(idx); setActiveFromStack(side); } },
-    release:function(side,idx){ if(heldStack[side].includes(idx)){ heldStack[side]=heldStack[side].filter(function(x){return x!==idx;}); setActiveFromStack(side); } }
-  };
-
-  window.addEventListener('resize',()=>{
-    if(engine) rebuildBounds();   // refit floor/walls + danger line to the new size
-  });
-
-  // (pad TAP buttons removed — you now tap the falling dish itself to plate it.
-  //  keyboard Space/Enter still work as a desktop convenience via the key handler.)
-
-  // ---------- start / over ----------
-  function start(){
-    try{ window.focus(); }catch(e){}
-    document.getElementById('exitBtn').style.visibility='visible';
-    field.querySelectorAll('.item,.floataward').forEach(e=>e.remove());
-    field.classList.remove('danger');
-    buildWorld();               // fresh physics world (clears any leftover bodies)
-    state=freshState();
-    state.levelIdx=-1;          // gate will advance us into level 0
-    state.running=true;
-    active.red=active.blue=null; heldStack.red=[];heldStack.blue=[];paintPads();
-    scoreEl.textContent='0';servedEl.textContent='0';waveEl.textContent='LV 1';
-    over.classList.add('hide');
-    over.classList.remove('isover');
-    if(restartBtn) restartBtn.style.display='none';
-    if(msg) msg.innerHTML='';
-    const toast=document.getElementById('toast'); if(toast) toast.remove();
-    state.lastT=performance.now();
-    // open the very first teach (level 0) on the gate, so the first thing the pair
-    // does is the Musketeers hold — learning the gesture before any dish falls.
-    enterGate();
-    requestAnimationFrame(loop);
-  }
-  function gameOver(){
-    state.running=false;
-    field.classList.remove('danger');
-    document.getElementById('exitBtn').style.visibility='hidden';
-    gateEl.classList.add('gatehide');
-    over.classList.remove('hide');
-    over.classList.add('isover');   // CSS hides demo/floaties/kicker/foot
-    over.querySelector('h1').innerHTML='<span>SERVICE</span><em>OVER</em>';
-    over.querySelector('.lead').innerHTML=
-      `Served <b style="color:var(--gold)">${state.served}</b> dishes · <b style="color:var(--gold)">${state.score}</b> pts<br>reached <b style="color:var(--gold)">level ${state.levelIdx+1}</b>`;
-    document.getElementById('startBtn').textContent='COOK AGAIN ▸';
-  }
-
-  document.getElementById('startBtn').addEventListener('click',start);
-
-  // ---------- exit / quit-to-menu ----------
-  const confirmEl=document.getElementById('confirm');
-  let wasRunning=false;
-  document.getElementById('exitBtn').addEventListener('click',()=>{
-    wasRunning = !!(state && state.running);
-    if(state) state.running=false;        // pause the loop while deciding
-    confirmEl.classList.remove('confirmhide');
-  });
-  document.getElementById('confirmNo').addEventListener('click',()=>{
-    confirmEl.classList.add('confirmhide');
-    if(wasRunning && state){               // resume exactly where we paused
-      state.running=true;
-      state.lastT=performance.now();
-      requestAnimationFrame(loop);
-    }
-  });
-  document.getElementById('confirmYes').addEventListener('click',()=>{
-    confirmEl.classList.add('confirmhide');
-    quitToMenu();
-  });
-
-  function quitToMenu(){
-    if(state) state.running=false;
-    field.classList.remove('danger');
-    if(engine) Composite.clear(engine.world, false);
-    document.getElementById('exitBtn').style.visibility='hidden';
-    gateEl.classList.add('gatehide');
-    field.querySelectorAll('.item,.floataward,#toast').forEach(e=>e.remove());
-    // restore the poster title (undo any game-over text)
-    over.classList.remove('isover');
-    over.querySelector('h1').innerHTML='<span>HOVER</span><em>COOKING</em>';
-    over.querySelector('.lead').innerHTML='A tiny kitchen.<br>A little chaos.';
-    document.getElementById('startBtn').textContent="LET'S COOK ▸";
-    over.classList.remove('hide');
-  }
-
-  // scatter floating food emojis on the title screen
-  (function seedFloaties(){
-    const box=document.getElementById('floaties'); if(!box) return;
-    const set=['🍅','🥩','🍳','🥔','🧅','🥕','🍞','🧀','🍄','🌶️','🐟','🥦','🍗','🥓'];
-    for(let i=0;i<12;i++){
-      const s=document.createElement('span');
-      s.textContent=set[Math.floor(Math.random()*set.length)];
-      s.style.left=(Math.random()*92+2)+'%';
-      s.style.top=(Math.random()*92+2)+'%';
-      s.style.fontSize=(20+Math.random()*26)+'px';
-      s.style.animationDuration=(5+Math.random()*5).toFixed(1)+'s';
-      s.style.animationDelay=(-Math.random()*5).toFixed(1)+'s';
-      box.appendChild(s);
-    }
-  })();
-  if(restartBtn) restartBtn.addEventListener('click',start);
-})();
-</script>
+<video id="video" playsinline muted></video>
+<canvas id="overlay"></canvas>
+<div id="chips"></div>
+<div id="fps"></div>
+<button id="startBtn">Loading detector…</button>
+<div id="hint">front-facing tag tester · ROI tracking</div>
 <script id="atag-core">
 var AprilTagWasm = (function() {
   var _scriptDir = typeof document !== 'undefined' && document.currentScript ? document.currentScript.src : undefined;
@@ -1150,56 +49,50 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
 <script id="worker-handler" type="javascript/worker">
 (function(){
   function b64(b){var s=atob(b),n=s.length,a=new Uint8Array(n);for(var i=0;i<n;i++)a[i]=s.charCodeAt(i);return a;}
-  var M=null,det,setbuf,setopt,initd;
-  AprilTagWasm({ wasmBinary: b64(WASM_B64) }).then(function(mod){
-    M=mod; initd=M.cwrap('atagjs_init','number',[]);
-    setopt=M.cwrap('atagjs_set_detector_options','number',['number','number','number','number','number','number','number']);
-    setbuf=M.cwrap('atagjs_set_img_buffer','number',['number','number','number']);
-    det=M.cwrap('atagjs_detect','number',[]); initd(); setopt(2.0,0.0,1,1,0,0,0); postMessage({ready:true});
-  });
-  self.onmessage=function(e){ var d=e.data;
-    if(d.setopt!==undefined){ if(M&&setopt) setopt(d.setopt,0.0,1,1,0,0,0); return; }
-    if(!M||!d.buf){ return; }
+  var M=null,det,setbuf,setopt,initd,curDec=-1;
+  function ensureDec(d){ if(d!==curDec){ setopt(d,0.0,1,1,0,0,0); curDec=d; } }
+  AprilTagWasm({ wasmBinary:b64(WASM_B64) }).then(function(mod){ M=mod;
+    initd=M.cwrap('atagjs_init','number',[]); setopt=M.cwrap('atagjs_set_detector_options','number',['number','number','number','number','number','number','number']);
+    setbuf=M.cwrap('atagjs_set_img_buffer','number',['number','number','number']); det=M.cwrap('atagjs_detect','number',[]);
+    initd(); ensureDec(2.0); postMessage({ready:true}); });
+  self.onmessage=function(e){ var d=e.data; if(!M||!d.buf) return; ensureDec(d.dec||2.0);
     var rgba=new Uint8Array(d.buf), n=d.w*d.h, gray=new Uint8Array(n);
     for(var i=0,j=0;j<n;i+=4,j++) gray[j]=(rgba[i]+rgba[i+1]+rgba[i+2])/3|0;
     var buf=setbuf(d.w,d.h,d.w); M.HEAPU8.set(gray,buf);
     var p=det(), len=M.getValue(p,'i32'), dets=[];
-    if(len>0){ var sp=M.getValue(p+4,'i32'), v=new Uint8Array(M.HEAP8.buffer,sp,len), s='';
-      for(var k=0;k<len;k++) s+=String.fromCharCode(v[k]); try{ dets=JSON.parse(s); }catch(_){} }
-    postMessage({dets:dets,t:d.t});
+    if(len>0){ var sp=M.getValue(p+4,'i32'), v=new Uint8Array(M.HEAP8.buffer,sp,len), s=''; for(var k=0;k<len;k++) s+=String.fromCharCode(v[k]); try{ dets=JSON.parse(s); }catch(_){} }
+    postMessage({dets:dets,t:d.t,sx:d.sx,sy:d.sy,sw:d.sw,sh:d.sh,w:d.w,h:d.h,mode:d.mode});
   };
 })();
 </script>
 <script>(function(){
-  // tag id -> player side + option index. RED=0..3, BLUE=4..7 (GREEN/YELLOW unused in 2P).
-  var ID2SIDE={}; for(var i=0;i<4;i++){ ID2SIDE[i]={side:'red',idx:i}; ID2SIDE[i+4]={side:'blue',idx:i}; }
   var COLORS=[['RED','#e23b2e'],['BLUE','#2f6fe0'],['GREEN','#1f9d4d'],['YELLOW','#e0a81f']];
   var LETTERS=['A','B','C','D'], ID_MAP={};
   for(var c=0;c<4;c++)for(var l=0;l<4;l++){var id=c*4+l;ID_MAP[id]={color:COLORS[c][0],hex:COLORS[c][1],letter:LETTERS[l]};}
 
-  var video=document.getElementById('tagVideo');
-  var overlay=document.getElementById('tagOverlay'), ox=overlay.getContext('2d');
+  var video=document.getElementById('video');
+  var overlay=document.getElementById('overlay'), ox=overlay.getContext('2d');
+  var chips=document.getElementById('chips'), startBtn=document.getElementById('startBtn'), hint=document.getElementById('hint'), fpsEl=document.getElementById('fps');
   var proc=document.createElement('canvas'), px=proc.getContext('2d',{willReadFrequently:true});
 
-  // --- detection settings (turbo). Bump PROC_W / lower DEC if the small stick tags don't hold. ---
-  var PROC_W=480, DEC=2.0, PW=480, PH=360, grayBuf=null;
-  // persistence (dialed down from the tester): general wait + smaller centre bonus
+  // SCAN presets (full-frame acquisition). ROI always runs sharp (decimate 1).
+  var PRESETS=[{n:'balanced',w:480,d:2.0},{n:'range',w:640,d:1.5},{n:'speed',w:384,d:3.0},{n:'turbo',w:320,d:4.0}], pIdx=0;
+  var ROI_MAX=520, ROI_DEC=1.0, SCAN_INTERVAL=160;     // ms between full scans while tracking
   var BASE_GRACE=420, CENTER_BONUS=650, MAX_EXTRAP=220, REINIT=350;
   var MINCUT=1.5, BETA=0.05, EASE=0.45;
 
-  var track={}, lastSeen={}, held={};
+  var vw=1280, vh=720, grayBuf=null;
+  var track={}, lastSeen={}, held={}, lastScan=0, lastMode='';
   var stream=null, raf=0, ready=false, busy=false;
-  var worker=null, useWorker=false, mTried=false, mReady=false, mM=null, mInit, mSo, mSb, mDt;
+  var worker=null, useWorker=false, mTried=false, mReady=false, mM=null, mInit, mSo, mSb, mDt, mDec=-1;
 
   function resize(){ overlay.width=window.innerWidth; overlay.height=window.innerHeight; }
   window.addEventListener('resize',resize); resize();
-  var detT=0, dN=0, dLast=performance.now(), hud=document.createElement('div');
-  hud.style.cssText='position:fixed;top:max(6px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:9991;font:700 11px ui-monospace,Menlo,Consolas,monospace;color:#9aa;background:rgba(0,0,0,.45);padding:3px 8px;border-radius:10px;pointer-events:none;';
-  document.body.appendChild(hud);
-  function meter(){ dN++; var now=performance.now(); detT+=now-dLast; dLast=now; if(detT>500){ hud.textContent=Math.round(1000/(detT/dN))+' det/s'+(useWorker?'':' (cpu)'); detT=0; dN=0; } }
   function b64(s){var b=atob(s),n=b.length,a=new Uint8Array(n);for(var i=0;i<n;i++)a[i]=b.charCodeAt(i);return a;}
+  function meter(){ dN++; var now=performance.now(); detT+=now-dLast; dLast=now; if(detT>500){ fpsEl.textContent=Math.round(1000/(detT/dN))+' det/s'+(useWorker?'':' (cpu)')+' \u00b7 '+lastMode; detT=0; dN=0; } }
+  var detT=0,dN=0,dLast=performance.now();
 
-  // One Euro filter
+  // One Euro
   function LowPass(){ this.s=null; }
   LowPass.prototype.filter=function(v,a){ this.s=(this.s===null)?v:a*v+(1-a)*this.s; return this.s; };
   function alphaFor(cut,dt){ var tau=1/(2*Math.PI*cut); return 1/(1+tau/dt); }
@@ -1208,17 +101,16 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
     var dx=(this.lx==null)?0:(x-this.lx)/dt; this.lx=x; var edx=this.dxf.filter(dx,alphaFor(this.dc,dt));
     return this.xf.filter(x, alphaFor(this.mc+this.beta*Math.abs(edx),dt)); };
 
-  function centerFactor(tr){ if(tr.fcx==null) return 0; var dx=tr.fcx-PW/2, dy=tr.fcy-PH/2;
-    var f=1-Math.sqrt(dx*dx+dy*dy)/(Math.sqrt(PW*PW+PH*PH)/2); return f<0?0:f; }
+  function centerFactor(tr){ if(tr.fcx==null) return 0; var dx=tr.fcx-vw/2, dy=tr.fcy-vh/2;
+    var f=1-Math.sqrt(dx*dx+dy*dy)/(Math.sqrt(vw*vw+vh*vh)/2); return f<0?0:f; }
   function graceFor(tr){ return BASE_GRACE + CENTER_BONUS*centerFactor(tr); }
 
-  // ---- detector: Web Worker, fall back to main thread ----
+  // ---- detector init (worker + fallback) ----
   function initDetector(){
-    var core=document.getElementById('atag-core').textContent;
-    var handler=document.getElementById('worker-handler').textContent;
+    var core=document.getElementById('atag-core').textContent, handler=document.getElementById('worker-handler').textContent;
     try{
       worker=new Worker(URL.createObjectURL(new Blob([core+'\n'+handler],{type:'application/javascript'})));
-      worker.onmessage=function(e){ if(e.data.ready){ ready=true; worker.postMessage({setopt:DEC}); return; } onDets(e.data.dets,e.data.t); busy=false; meter(); };
+      worker.onmessage=function(e){ if(e.data.ready){ ready=true; startBtn.disabled=false; startBtn.textContent='Start camera'; return; } handleResult(e.data); busy=false; meter(); };
       worker.onerror=function(){ if(!ready) fallbackMain(); };
       useWorker=true; setTimeout(function(){ if(!ready&&useWorker) fallbackMain(); },2500);
     }catch(e){ fallbackMain(); }
@@ -1226,92 +118,109 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
   function fallbackMain(){
     if(mTried) return; mTried=true; useWorker=false;
     try{ if(worker){ worker.terminate(); worker=null; } }catch(e){}
-    if(typeof AprilTagWasm!=='function') return;
-    AprilTagWasm({ wasmBinary:b64(WASM_B64) }).then(function(M){
-      mM=M; mInit=M.cwrap('atagjs_init','number',[]);
-      mSo=M.cwrap('atagjs_set_detector_options','number',['number','number','number','number','number','number','number']);
-      mSb=M.cwrap('atagjs_set_img_buffer','number',['number','number','number']);
-      mDt=M.cwrap('atagjs_detect','number',[]);
-      mInit(); mSo(DEC,0.0,1,1,0,0,0); mReady=true; ready=true;
+    if(typeof AprilTagWasm!=='function'){ hint.textContent='detector unavailable here \u2014 use the deployed page'; return; }
+    AprilTagWasm({wasmBinary:b64(WASM_B64)}).then(function(M){
+      mM=M; mInit=M.cwrap('atagjs_init','number',[]); mSo=M.cwrap('atagjs_set_detector_options','number',['number','number','number','number','number','number','number']);
+      mSb=M.cwrap('atagjs_set_img_buffer','number',['number','number','number']); mDt=M.cwrap('atagjs_detect','number',[]);
+      mInit(); mReady=true; ready=true; startBtn.disabled=false; startBtn.textContent='Start camera';
     }).catch(function(){});
   }
-  function mainDetect(gray,w,h){ if(!mM) return []; var buf=mSb(w,h,w); mM.HEAPU8.set(gray,buf);
-    var p=mDt(), len=mM.getValue(p,'i32'); if(len===0) return [];
-    var sp=mM.getValue(p+4,'i32'), v=new Uint8Array(mM.HEAP8.buffer,sp,len), s='';
-    for(var i=0;i<len;i++) s+=String.fromCharCode(v[i]); try{ return JSON.parse(s); }catch(e){ return []; } }
+  function mainDetect(gray,w,h,dec){ if(!mM) return []; if(dec!==mDec){ mSo(dec,0.0,1,1,0,0,0); mDec=dec; }
+    var buf=mSb(w,h,w); mM.HEAPU8.set(gray,buf); var p=mDt(), len=mM.getValue(p,'i32'); if(len===0) return [];
+    var sp=mM.getValue(p+4,'i32'), v=new Uint8Array(mM.HEAP8.buffer,sp,len), s=''; for(var i=0;i<len;i++) s+=String.fromCharCode(v[i]);
+    try{ return JSON.parse(s); }catch(e){ return []; } }
 
-  function startCamera(){
-    if(stream) return;
-    navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720},frameRate:{ideal:60}},audio:false}).then(function(s){
-      stream=s; video.srcObject=s; video.play();
-      try{ var tr=s.getVideoTracks()[0]; if(tr&&tr.applyConstraints) tr.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(function(){}); }catch(e){}
-      cancelAnimationFrame(raf); raf=requestAnimationFrame(loop);
-    }).catch(function(){ /* no camera: game still plays with touch + keyboard */ });
+  async function start(){
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720},frameRate:{ideal:60}},audio:false});
+      video.srcObject=stream; await video.play();
+      try{ var tr=stream.getVideoTracks()[0]; if(tr&&tr.applyConstraints) tr.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(function(){}); }catch(e){}
+      startBtn.style.display='none'; cancelAnimationFrame(raf); raf=requestAnimationFrame(loop);
+    }catch(e){ hint.textContent='Camera error: '+e.message+' (needs https + permission)'; }
   }
 
-  function capture(){ var vw=video.videoWidth, vh=video.videoHeight; PW=PROC_W; PH=Math.round(PROC_W*vh/vw);
-    proc.width=PW; proc.height=PH; px.drawImage(video,0,0,PW,PH); return px.getImageData(0,0,PW,PH); }
+  function predict(tr,now){ var t=Math.min((now-tr.t)/1000,0.12); return {x:tr.fcx+(tr.vx||0)*t, y:tr.fcy+(tr.vy||0)*t}; }
+  function roiRegion(now){
+    var minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9, any=false;
+    for(var id in track){ var tr=track[id]; if((now-tr.t)>REINIT||tr.fcx==null) continue; any=true;
+      var p=predict(tr,now), sp=Math.sqrt((tr.vx||0)*(tr.vx||0)+(tr.vy||0)*(tr.vy||0));
+      var ext=(tr.r||40)*1.5 + 0.04*vw + sp*0.03;
+      if(p.x-ext<minX)minX=p.x-ext; if(p.x+ext>maxX)maxX=p.x+ext; if(p.y-ext<minY)minY=p.y-ext; if(p.y+ext>maxY)maxY=p.y+ext;
+    }
+    if(!any) return null;
+    minX=Math.max(0,minX); minY=Math.max(0,minY); maxX=Math.min(vw,maxX); maxY=Math.min(vh,maxY);
+    if(maxX-minX<40||maxY-minY<40) return null;
+    return {sx:minX,sy:minY,sw:maxX-minX,sh:maxY-minY};
+  }
+
+  function send(sx,sy,sw,sh,bufW,bufH,dec,mode,now){
+    proc.width=bufW; proc.height=bufH; px.drawImage(video,sx,sy,sw,sh,0,0,bufW,bufH);
+    var img=px.getImageData(0,0,bufW,bufH); var meta={sx:sx,sy:sy,sw:sw,sh:sh,w:bufW,h:bufH,t:now,dec:dec,mode:mode};
+    if(useWorker){ busy=true; var m=img.data.buffer; worker.postMessage({buf:m,w:bufW,h:bufH,t:now,dec:dec,sx:sx,sy:sy,sw:sw,sh:sh,mode:mode},[m]); }
+    else if(mReady){ var n=bufW*bufH; if(!grayBuf||grayBuf.length!==n) grayBuf=new Uint8Array(n);
+      var d=img.data; for(var i=0,j=0;j<n;i+=4,j++) grayBuf[j]=(d[i]+d[i+1]+d[i+2])/3|0;
+      meta.dets=mainDetect(grayBuf,bufW,bufH,dec); handleResult(meta); meter(); }
+  }
+  function scheduleScan(now){ var bw=PRESETS[pIdx].w, bh=Math.round(bw*vh/vw); lastScan=now; lastMode='scan'; send(0,0,vw,vh,bw,bh,PRESETS[pIdx].d,'scan',now); }
+  function scheduleROI(r,now){ var bw=Math.min(Math.round(r.sw),ROI_MAX), bh=Math.max(1,Math.round(bw*r.sh/r.sw)); lastMode='roi'; send(r.sx,r.sy,r.sw,r.sh,bw,bh,ROI_DEC,'roi',now); }
 
   function loop(){
     raf=requestAnimationFrame(loop); var now=performance.now();
-    if(video.readyState>=2 && video.videoWidth){
-      if(useWorker){ if(ready&&!busy){ var img=capture(); busy=true; worker.postMessage({buf:img.data.buffer,w:PW,h:PH,t:now},[img.data.buffer]); } }
-      else if(mReady){ var im=capture(), n=PW*PH; if(!grayBuf||grayBuf.length!==n) grayBuf=new Uint8Array(n);
-        var d=im.data; for(var i=0,j=0;j<n;i+=4,j++) grayBuf[j]=(d[i]+d[i+1]+d[i+2])/3|0;
-        onDets(mainDetect(grayBuf,PW,PH), now); meter(); }
-      frame(now);
+    if(video.readyState>=2 && video.videoWidth){ vw=video.videoWidth; vh=video.videoHeight;
+      if(ready && !busy){ var r=((now-lastScan)<SCAN_INTERVAL)?roiRegion(now):null; if(r) scheduleROI(r,now); else scheduleScan(now); }
+      drawOverlay(now);
     }
   }
 
-  function onDets(dets,t){
-    for(var k=0;k<dets.length;k++){ var mk=dets[k]; if(!(mk.id in ID_MAP)||!mk.corners) continue;
-      lastSeen[mk.id]=t; var tr=track[mk.id];
-      var cx=(mk.corners[0].x+mk.corners[2].x)/2, cy=(mk.corners[0].y+mk.corners[2].y)/2;
-      if(tr && (t-tr.t)<=REINIT){ tr.prev=tr.corners; tr.tPrev=tr.t; tr.corners=mk.corners; tr.t=t; }
-      else { tr=track[mk.id]={corners:mk.corners,prev:null,tPrev:0,t:t,ex:new OneEuro(MINCUT,BETA),ey:new OneEuro(MINCUT,BETA),dcx:cx,dcy:cy}; }
-      tr.fcx=tr.ex.filter(cx,t); tr.fcy=tr.ey.filter(cy,t);
+  function handleResult(d){ if(!d.dets) return; var sX=d.sw/d.w, sY=d.sh/d.h;
+    for(var k=0;k<d.dets.length;k++){ var mk=d.dets[k]; if(!(mk.id in ID_MAP)||!mk.corners) continue;
+      var corners=mk.corners.map(function(c){ return {x:d.sx+c.x*sX, y:d.sy+c.y*sY}; });
+      updateTrack(mk.id, corners, d.t);
     }
   }
+  function updateTrack(id, corners, t){
+    lastSeen[id]=t; var tr=track[id];
+    var cx=(corners[0].x+corners[2].x)/2, cy=(corners[0].y+corners[2].y)/2;
+    var ddx=corners[0].x-corners[2].x, ddy=corners[0].y-corners[2].y, r=Math.sqrt(ddx*ddx+ddy*ddy)/2;
+    if(tr && (t-tr.t)<=REINIT){ var pdt=Math.max(0.001,(t-tr.t)/1000); tr.vx=(cx-tr.cx)/pdt; tr.vy=(cy-tr.cy)/pdt;
+      tr.prev=tr.corners; tr.tPrev=tr.t; tr.corners=corners; tr.t=t; tr.cx=cx; tr.cy=cy; tr.r=r; }
+    else { tr=track[id]={corners:corners,prev:null,tPrev:0,t:t,cx:cx,cy:cy,r:r,vx:0,vy:0,ex:new OneEuro(MINCUT,BETA),ey:new OneEuro(MINCUT,BETA),dcx:cx,dcy:cy}; }
+    tr.fcx=tr.ex.filter(cx,t); tr.fcy=tr.ey.filter(cy,t);
+  }
 
-  function coverMap(vw,vh){ var cw=window.innerWidth, ch=window.innerHeight, s=Math.max(cw/vw,ch/vh);
+  function coverMap(){ var cw=window.innerWidth, ch=window.innerHeight, s=Math.max(cw/vw,ch/vh);
     return {scale:s,dx:(cw-vw*s)/2,dy:(ch-vh*s)/2,cw:cw,ch:ch}; }
-  function mapPt(dx,dy,vw,vh,m){ var fx=dx*vw/PW, fy=dy*vh/PH; return { x:m.cw-(m.dx+fx*m.scale), y:m.dy+fy*m.scale }; }
+  function mapPt(vx2,vy2,m){ return { x:m.cw-(m.dx+vx2*m.scale), y:m.dy+vy2*m.scale }; }
 
-  function frame(now){
-    ox.clearRect(0,0,overlay.width,overlay.height);
-    var vw=video.videoWidth, vh=video.videoHeight, m=coverMap(vw,vh);
-    ox.lineWidth=2; ox.font='bold 15px ui-monospace,monospace'; ox.textAlign='center'; ox.textBaseline='middle';
+  function drawOverlay(now){
+    ox.clearRect(0,0,overlay.width,overlay.height); var m=coverMap();
+    ox.lineWidth=3; ox.font='bold 18px ui-monospace,monospace'; ox.textAlign='center'; ox.textBaseline='middle';
     for(var id in track){
       var tr=track[id], age=now-tr.t, eg=graceFor(tr); if(age>eg) continue;
       var dd=ID_MAP[id], col=dd.hex, ex=Math.min(age,MAX_EXTRAP), dtv=tr.prev?(tr.t-tr.tPrev):0;
-      var cs=tr.corners.map(function(cc,ix){ if(tr.prev&&dtv>0){ var p=tr.prev[ix]; return mapPt(cc.x+(cc.x-p.x)/dtv*ex,cc.y+(cc.y-p.y)/dtv*ex,vw,vh,m);} return mapPt(cc.x,cc.y,vw,vh,m); });
+      var cs=tr.corners.map(function(c,ix){ if(tr.prev&&dtv>0){ var p=tr.prev[ix]; return mapPt(c.x+(c.x-p.x)/dtv*ex,c.y+(c.y-p.y)/dtv*ex,m); } return mapPt(c.x,c.y,m); });
       var a=Math.max(0.3,1-age/eg);
-      ox.globalAlpha=a*0.4; ox.strokeStyle=col; ox.beginPath(); ox.moveTo(cs[0].x,cs[0].y);
+      ox.globalAlpha=a*0.45; ox.lineWidth=2; ox.strokeStyle=col; ox.beginPath(); ox.moveTo(cs[0].x,cs[0].y);
       for(var j=1;j<cs.length;j++) ox.lineTo(cs[j].x,cs[j].y); ox.closePath(); ox.stroke();
-      if(tr.fcx!=null){
-        tr.dcx+=(tr.fcx-tr.dcx)*EASE; tr.dcy+=(tr.fcy-tr.dcy)*EASE;
-        var dp=mapPt(tr.dcx,tr.dcy,vw,vh,m);
-        ox.globalAlpha=a; ox.beginPath(); ox.arc(dp.x,dp.y,11,0,7); ox.fillStyle=col; ox.fill();
+      if(tr.fcx!=null){ tr.dcx+=(tr.fcx-tr.dcx)*EASE; tr.dcy+=(tr.fcy-tr.dcy)*EASE; var dp=mapPt(tr.dcx,tr.dcy,m);
+        ox.globalAlpha=a; ox.beginPath(); ox.arc(dp.x,dp.y,12,0,7); ox.fillStyle=col; ox.fill();
         ox.lineWidth=3; ox.strokeStyle='rgba(255,255,255,.92)'; ox.stroke();
-        var lbl=dd.color+' '+dd.letter, w=ox.measureText(lbl).width+12;
-        ox.fillStyle='rgba(0,0,0,.55)'; ox.fillRect(dp.x-w/2,dp.y-28,w,21); ox.fillStyle='#fff'; ox.fillText(lbl,dp.x,dp.y-17);
-      }
+        var lbl=dd.color+' '+dd.letter, w=ox.measureText(lbl).width+14;
+        ox.fillStyle='rgba(0,0,0,.6)'; ox.fillRect(dp.x-w/2,dp.y-31,w,24); ox.fillStyle='#fff'; ox.fillText(lbl,dp.x,dp.y-19); }
       ox.globalAlpha=1;
     }
-    // presence + drive the game's held buttons
-    var br=window.__tagBridge;
-    for(var id2=0;id2<16;id2++){ var trk=track[id2]; var p=trk?((now-(lastSeen[id2]||-1e9))<=graceFor(trk)):false; held[id2]=p;
-      if(id2<8 && br){ var mp=ID2SIDE[id2]; if(p) br.hold(mp.side,mp.idx); else br.release(mp.side,mp.idx); }
-    }
-    if(changeCb){ var any=[]; for(var q=0;q<16;q++) if(held[q]) any.push({id:q,color:ID_MAP[q].color,letter:ID_MAP[q].letter}); try{ changeCb(any); }catch(e){} }
+    var any=[]; for(var id2=0;id2<16;id2++){ var trk=track[id2]; var p=trk?((now-(lastSeen[id2]||-1e9))<=graceFor(trk)):false; held[id2]=p; if(p)any.push(id2); }
+    chips.innerHTML = any.length ? any.map(function(id){var dd=ID_MAP[id];return '<span class="chip" style="background:'+dd.hex+'">'+dd.color+' '+dd.letter+'</span>';}).join('') : '<span class="chip none">no tags detected</span>';
+    if(changeCb){ try{ changeCb(any.map(function(id){return {id:id,color:ID_MAP[id].color,letter:ID_MAP[id].letter};})); }catch(e){} }
   }
 
   var changeCb=null;
   window.TagInput={ onChange:function(cb){changeCb=cb;}, getHeld:function(){var r=[];for(var id in held)if(held[id])r.push({id:+id,color:ID_MAP[id].color,letter:ID_MAP[id].letter});return r;} };
 
-  var sb=document.getElementById('startBtn'); if(sb) sb.addEventListener('click',startCamera);
+  window.addEventListener('click',function(){ if(!stream) return; pIdx=(pIdx+1)%PRESETS.length; hint.textContent='scan: '+PRESETS[pIdx].n+' \u00b7 tap to change'; });
+  startBtn.disabled=true; startBtn.textContent='Loading detector\u2026';
+  startBtn.addEventListener('click',start);
   initDetector();
 })();
 </script>
-</body>
-</html>
+</body></html>
