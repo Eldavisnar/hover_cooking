@@ -83,8 +83,8 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
   var overlay=document.getElementById('overlay'), ox=overlay.getContext('2d');
   var chips=document.getElementById('chips'), startBtn=document.getElementById('startBtn'), hint=document.getElementById('hint'), fpsEl=document.getElementById('fps');
   var proc=document.createElement('canvas'), px=proc.getContext('2d',{willReadFrequently:true});
-  var PROC_W=384, PW=384, PH=288, grayBuf=null;
-  var PRESETS=[{n:'speed',w:384,d:3.0},{n:'turbo',w:320,d:4.0},{n:'balanced',w:480,d:2.0},{n:'range',w:640,d:1.5}], pIdx=0;
+  var PROC_W=480, PW=480, PH=360, grayBuf=null;
+  var PRESETS=[{n:'balanced',w:480,d:2.0},{n:'range',w:640,d:1.5},{n:'speed',w:384,d:3.0},{n:'turbo',w:320,d:4.0}], pIdx=0;
   var track={}, lastSeen={}, held={}, BASE_GRACE=420, CENTER_BONUS=650, MAX_EXTRAP=190, REINIT=350;
   var MINCUT=1.5, BETA=0.02, EASE=0.35;   // One-Euro params + render easing
   // longer wait before a tag is "gone", and even longer the closer it is to frame centre
@@ -151,7 +151,7 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
 
   async function start(){
     try{
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},audio:false});
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720},frameRate:{ideal:60}},audio:false});
       video.srcObject=stream; await video.play();
       try{ var tr=stream.getVideoTracks()[0]; if(tr&&tr.applyConstraints) tr.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(function(){}); }catch(e){}
       startBtn.style.display='none';
