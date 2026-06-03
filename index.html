@@ -78,8 +78,8 @@ var WASM_B64="AGFzbQEAAAAB2AI0YAF/AX9gAn9/AX9gAX8AYAJ/fwBgA39/fwF/YAN/f38AYAABf2
   // SCAN presets (full-frame acquisition). ROI always runs sharp (decimate 1).
   var PRESETS=[{n:'balanced',w:480,d:2.0},{n:'range',w:640,d:1.5},{n:'speed',w:384,d:3.0},{n:'turbo',w:320,d:4.0}], pIdx=0;
   var ROI_MAX=520, ROI_DEC=1.0, SCAN_INTERVAL=160;     // ms between full scans while tracking
-  var BASE_GRACE=420, CENTER_BONUS=650, MAX_EXTRAP=220, REINIT=350;
-  var MINCUT=1.5, BETA=0.05, EASE=0.45;
+  var BASE_GRACE=420, CENTER_BONUS=650, MAX_EXTRAP=190, REINIT=350;
+  var MINCUT=1.5, BETA=0.02, EASE=0.35;
 
   var vw=1280, vh=720, grayBuf=null;
   var track={}, lastSeen={}, held={}, lastScan=0, lastMode='';
